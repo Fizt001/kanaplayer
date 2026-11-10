@@ -339,6 +339,87 @@ body { background: #0b0c0f; margin: 0; }
 .ac-btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 
 /* ========================================================
+   DEVICE MUSIC VIEW
+   ======================================================== */
+.device-banner {
+  background: linear-gradient(135deg, rgba(0, 198, 255, 0.12), rgba(22, 24, 29, 0.95));
+  border: 1px solid rgba(0, 198, 255, 0.22);
+  border-radius: 20px;
+  padding: 22px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  flex-wrap: wrap;
+}
+.device-banner-text h3 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--txt);
+}
+.device-banner-text p {
+  margin: 0;
+  color: var(--mut);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.device-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.btn-device-add {
+  padding: 10px 20px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  border-radius: 99px !important;
+  background: linear-gradient(135deg, #00c6ff, #0072ff) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 18px rgba(0, 198, 255, 0.4) !important;
+  transition: all .18s ease !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.btn-device-add:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow: 0 6px 22px rgba(0, 198, 255, 0.55) !important;
+}
+.btn-device-folder {
+  padding: 10px 18px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  border-radius: 99px !important;
+  background: var(--panel2) !important;
+  color: var(--txt) !important;
+  border: 1px solid var(--line) !important;
+  transition: all .15s ease !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.btn-device-folder:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  transform: translateY(-1px);
+}
+.tag-local {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(0, 198, 255, 0.15);
+  color: #38bdf8;
+  margin-left: 6px;
+}
+
+/* ========================================================
    PLAYLIST VIEW BANNER & CARDS
    ======================================================== */
 .pl-banner {
@@ -490,7 +571,62 @@ body { background: #0b0c0f; margin: 0; }
 #np .wrapnp { width: 100%; max-width: 500px; margin: 0 auto; padding: 0 24px 24px; display: flex; flex-direction: column; flex: 1; }
 #np .top { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
 #np .top span { color: var(--mut); font-size: 13px; font-weight: 600; }
-#bigcv { width: min(100%, 48vh); aspect-ratio: 1; margin: 12px auto 20px; border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+.np-cover-container {
+  position: relative;
+  width: min(100%, 48vh);
+  aspect-ratio: 1;
+  margin: 12px auto 20px;
+  cursor: pointer;
+}
+#bigcv {
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.65);
+}
+.np-lyrics-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(14, 16, 22, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: 18px;
+  border: 1px solid rgba(124, 92, 255, 0.25);
+  display: none;
+  flex-direction: column;
+  padding: 16px;
+  box-sizing: border-box;
+  animation: fadeIn .2s ease;
+}
+.np-lyrics-overlay.open {
+  display: flex !important;
+}
+.lyrics-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--mut);
+}
+.lyrics-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 8px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 2;
+  white-space: pre-wrap;
+  color: #e2e8f0;
+}
+.lyrics-empty {
+  color: var(--mut);
+  margin: auto;
+  font-size: 14px;
+}
 #np .meta { display: flex; align-items: center; gap: 8px; }
 #np .meta .tx { flex: 1; min-width: 0; }
 #np .meta b { display: block; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

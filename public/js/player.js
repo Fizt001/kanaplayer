@@ -9,7 +9,8 @@ const au = $('#au');
 
 const S = {
   tracks: [], byId: new Map(), playlists: [], me: null,
-  nav: 'music',                     // 'music' | 'playlists' | 'account'
+  localTracks: [],                  // lagu offline / lokal dari perangkat pengguna
+  nav: 'music',                     // 'music' | 'device' | 'playlists' | 'account'
   tab: 'tracks',                    // sub-tab musik: 'tracks' | 'albums' | 'artists' | 'genres'
   detail: null,                     // { kind: 'album'|'artist'|'genre'|'playlist'|'fav'|'recent'|'most', key, title }
   q: '', sort: 'title',
@@ -29,7 +30,7 @@ const fmt = s => {
 const cmp = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'id', {numeric: true, sensitivity: 'base'});
 const icon = n => `<svg class="ic"><use href="#i-${n}"/></svg>`;
 const shuffleArr = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const cur = () => S.byId.get(S.queue[S.qi]);
+const cur = () => S.byId.get(S.queue[S.qi]) || S.localTracks.find(x => x.id === S.queue[S.qi]);
 
 let toastT;
 function toast(msg) {
@@ -141,8 +142,144 @@ $('#dlg-confirm')?.addEventListener('click', e => {
   if (e.target.id === 'dlg-confirm') closeConfirmDialog(false);
 });
 
+/* ---------- local device storage (IndexedDB) ---------- */
+const DB_NAME = 'PlayerMP3_DeviceStorage';
+const DB_VERSION = 1;
+const STORE_NAME = 'tracks';
+
+function openDeviceDB() {
+  return new Promise(resolve => {
+    if (!window.indexedDB) return resolve(null);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror = e => { console.warn('IndexedDB error', e); resolve(null); };
+  });
+}
+
+async function loadLocalTracks() {
+  try {
+    const db = await openDeviceDB();
+    if (!db) return [];
+    return new Promise(resolve => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        S.localTracks = req.result || [];
+        resolve(S.localTracks);
+      };
+      req.onerror = () => resolve([]);
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
+async function saveLocalTrack(track) {
+  try {
+    const db = await openDeviceDB();
+    if (!db) return;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.put(track);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {}
+}
+
+async function deleteLocalTrack(id) {
+  try {
+    const db = await openDeviceDB();
+    if (!db) return;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {}
+}
+
+async function clearAllLocalTracks() {
+  try {
+    const db = await openDeviceDB();
+    if (!db) return;
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {}
+}
+
+function getAudioDuration(file) {
+  return new Promise(resolve => {
+    const tempAu = document.createElement('audio');
+    const url = URL.createObjectURL(file);
+    tempAu.preload = 'metadata';
+    tempAu.src = url;
+    tempAu.onloadedmetadata = () => {
+      const d = tempAu.duration;
+      URL.revokeObjectURL(url);
+      resolve(isFinite(d) ? Math.round(d) : 0);
+    };
+    tempAu.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(0);
+    };
+  });
+}
+
+async function addLocalFiles(fileList) {
+  const files = [...fileList].filter(f => f.type.startsWith('audio/') || /\.(mp3|m4a|aac|ogg|opus|wav|flac)$/i.test(f.name));
+  if (!files.length) return toast('Tidak ada file audio yang cocok.');
+  toast(`Memproses ${files.length} lagu dari perangkat...`);
+  let count = 0;
+  for (const f of files) {
+    const id = 'dev_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    let clean = f.name.replace(/\.[^/.]+$/, '');
+    let artist = 'Perangkat Lokal';
+    let title = clean;
+    if (clean.includes(' - ')) {
+      const parts = clean.split(' - ');
+      artist = parts[0].trim();
+      title = parts.slice(1).join(' - ').trim();
+    }
+    const dur = await getAudioDuration(f);
+    const localTrack = {
+      id,
+      is_local: true,
+      title: title || f.name,
+      artist: artist,
+      album: 'Musik Perangkat',
+      duration: dur,
+      size: f.size,
+      blob: f,
+      cover_url: null,
+      created_at: new Date().toISOString(),
+    };
+    await saveLocalTrack(localTrack);
+    S.localTracks.push(localTrack);
+    count++;
+  }
+  toast(`${count} lagu berhasil ditambahkan dari perangkat!`);
+  render();
+}
+
 /* ---------- data loading ---------- */
 async function loadAll() {
+  await loadLocalTracks();
   const [t, p, m] = await Promise.all([api('/tracks'), api('/playlists'), api('/me')]);
   S.tracks = Array.isArray(t.data) ? t.data : [];
   S.byId = new Map(S.tracks.map(x => [x.id, x]));
@@ -209,12 +346,16 @@ function detailTracks(d) {
 }
 
 function trackRow(t) {
-  const on = cur() && cur().id === t.id;
+  const on = cur() && String(cur().id) === String(t.id);
+  const isLoc = t.is_local || String(t.id).startsWith('dev_');
   return `<div class="row ${on ? 'on' : ''}" data-act="play" data-id="${t.id}">
     ${coverHtml(t.cover_url)}
-    <div class="tx"><b>${esc(t.title)}</b><span>${esc(t.artist || 'Artis tidak diketahui')}${t.album ? ' · ' + esc(t.album) : ''}</span></div>
+    <div class="tx">
+      <b>${esc(t.title)}${isLoc ? '<span class="tag-local">Perangkat</span>' : ''}</b>
+      <span>${esc(t.artist || 'Artis tidak diketahui')}${t.album ? ' · ' + esc(t.album) : ''}</span>
+    </div>
     <span class="du">${fmt(t.duration)}</span>
-    <button class="ib" data-act="menu" data-id="${t.id}" aria-label="Menu">${icon('more')}</button>
+    <button class="ib" data-act="${isLoc ? 'local-menu' : 'menu'}" data-id="${t.id}" aria-label="Menu">${icon('more')}</button>
   </div>`;
 }
 
@@ -267,6 +408,59 @@ function renderMusicView() {
     }).join('');
   }
   return '';
+}
+
+/* ========================================================
+   RENDER MENU: MUSIK PERANGKAT (Lokal IndexedDB)
+   ======================================================== */
+function renderDeviceView() {
+  const q = S.q;
+  let list = S.localTracks.filter(t => matches(q, t.title, t.artist, t.album));
+  S.ctx = list.map(t => t.id);
+
+  let h = `
+  <div class="device-banner">
+    <div class="device-banner-text">
+      <h3>Musik di Perangkat Ini</h3>
+      <p>Putar lagu dari penyimpanan HP atau Laptop Anda tanpa upload ke server. Gratis sepuasnya tanpa batas kuota.</p>
+    </div>
+    <div class="device-actions">
+      <button class="btn-device-add" data-act="pick-local-files">
+        <svg class="ic"><use href="#i-add"/></svg>
+        <span>Pilih Lagu</span>
+      </button>
+      <button class="btn-device-folder" data-act="pick-local-folder">
+        <svg class="ic"><use href="#i-folder"/></svg>
+        <span>Buka Folder</span>
+      </button>
+    </div>
+  </div>`;
+
+  if (!S.localTracks.length) {
+    return h + `
+    <div class="empty" style="padding:48px 16px;text-align:center;">
+      <div style="font-size:36px;margin-bottom:12px;">📁</div>
+      <b style="display:block;font-size:16px;color:var(--txt);margin-bottom:6px;">Belum Ada Musik Perangkat</b>
+      <p style="color:var(--mut);font-size:13px;max-width:380px;margin:0 auto 16px;line-height:1.5;">
+        Klik tombol di atas untuk memilih lagu atau folder musik dari HP/Laptop Anda. Lagu akan tersimpan di browser ini dan siap diputar kapan saja!
+      </p>
+    </div>`;
+  }
+
+  if (!list.length) {
+    return h + `<div class="empty">Tidak ada lagu perangkat yang cocok dengan pencarian.</div>`;
+  }
+
+  h += `
+  <div class="tb">
+    <button class="pill acc" data-act="playall">${icon('play')}Putar</button>
+    <button class="pill" data-act="shuffleall">${icon('shuffle')}Acak</button>
+    <span class="sp"></span>
+    <span style="font-size:13px;color:var(--mut);">${list.length} lagu</span>
+    <button class="ib" data-act="clear-local-music" title="Hapus semua lagu perangkat" aria-label="Hapus semua">${icon('close')}</button>
+  </div>`;
+
+  return h + list.map(trackRow).join('');
 }
 
 /* ========================================================
@@ -472,12 +666,13 @@ function render() {
     h1.classList.add('sub');
   } else {
     h1.classList.remove('sub');
-    if (nav === 'music') h1.textContent = 'Putar Musik';
+    if (nav === 'music') h1.textContent = 'Musik Cloud';
+    else if (nav === 'device') h1.textContent = 'Musik Perangkat';
     else if (nav === 'playlists') h1.textContent = 'Playlist';
     else if (nav === 'account') h1.textContent = 'Setting Akun';
   }
 
-  // Sub-tabs Musik (hanya muncul saat di menu Musik dan bukan sedang di halaman detail)
+  // Sub-tabs Musik (hanya muncul saat di menu Musik Cloud dan bukan sedang di halaman detail)
   const musicTabs = $('#music-tabs');
   if (musicTabs) {
     musicTabs.hidden = (nav !== 'music' || !!d);
@@ -493,6 +688,7 @@ function render() {
     $('#content').innerHTML = renderDetail();
   } else {
     if (nav === 'music') $('#content').innerHTML = renderMusicView();
+    else if (nav === 'device') $('#content').innerHTML = renderDeviceView();
     else if (nav === 'playlists') $('#content').innerHTML = renderPlaylistsView();
     else if (nav === 'account') $('#content').innerHTML = renderAccountView();
   }
@@ -503,15 +699,34 @@ function render() {
 
 function markNow() {
   const id = cur() && cur().id;
-  $$('#content .row[data-act=play]').forEach(r => r.classList.toggle('on', +r.dataset.id === id));
+  $$('#content .row[data-act=play]').forEach(r => r.classList.toggle('on', String(r.dataset.id) === String(id)));
 }
 
 /* ========================================================
    PEMUTARAN AUDIO & KONTROL
    ======================================================== */
 async function playAt(i, startPos = 0) {
-  const id = S.queue[i], t = S.byId.get(id);
+  const id = S.queue[i];
+  const t = S.byId.get(id) || S.localTracks.find(x => x.id === id);
   if (!t) return false;
+
+  // Lagu dari perangkat lokal: Putar langsung via Blob URL tanpa batasan kuota server
+  if (t.is_local || String(id).startsWith('dev_')) {
+    if (!t.blobUrl && t.blob) {
+      t.blobUrl = URL.createObjectURL(t.blob);
+    }
+    S.qi = i;
+    au.src = t.blobUrl || '';
+    au.playbackRate = S.speed;
+    if (startPos > 1) au.addEventListener('loadedmetadata', () => { au.currentTime = startPos; }, {once: true});
+    try { await au.play(); } catch (e) {}
+    nowUI(t);
+    saveState();
+    markNow();
+    return true;
+  }
+
+  // Lagu cloud VPS: verifikasi kuota dan stream dari server
   const r = await api(`/tracks/${id}/play`, 'POST');
   if (r.status === 402) {
     au.pause();
@@ -592,7 +807,8 @@ function syncModes() {
 
 /* Antrean */
 function enqueue(id, now) {
-  if (!S.byId.has(id)) return;
+  const t = S.byId.get(id) || S.localTracks.find(x => x.id === id);
+  if (!t) return;
   if (S.qi < 0 || !S.queue.length) { S.queue = [id]; S.orig = [id]; S.qi = -1; playAt(0); return; }
   const at = now ? S.qi + 1 : S.queue.length;
   S.queue.splice(at, 0, id);
@@ -621,7 +837,7 @@ function renderQueue() {
   if (!S.queue.length) { el.innerHTML = '<div class="empty">Antrean kosong.</div>'; return; }
   let h = '';
   S.queue.forEach((id, i) => {
-    const t = S.byId.get(id); if (!t) return;
+    const t = S.byId.get(id) || S.localTracks.find(x => x.id === id); if (!t) return;
     if (i === S.qi) h += '<div class="qlabel">Sedang diputar</div>';
     if (i === S.qi + 1) h += '<div class="qlabel">Berikutnya</div>';
     h += `<div class="qrow ${i === S.qi ? 'on' : ''} ${i < S.qi ? 'done' : ''}" data-act="qplay" data-i="${i}">
@@ -658,6 +874,19 @@ function nowUI(t) {
   favUI(t);
   document.title = `${t.title} - PlayerMP3`;
   $('#tdur').textContent = fmt(t.duration);
+
+  // Perbarui lirik jika jendela lirik sedang terbuka
+  const lyEl = $('#nplyrics');
+  if (lyEl && lyEl.classList.contains('open')) {
+    const lText = $('#lyrics-text');
+    if (t && t.lyrics && t.lyrics.trim()) {
+      lText.textContent = t.lyrics;
+      lText.classList.remove('lyrics-empty');
+    } else {
+      lText.innerHTML = '<span class="lyrics-empty">Lirik belum tersedia untuk lagu ini.</span>';
+    }
+  }
+
   if ('mediaSession' in navigator) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: t.title, artist: t.artist || '', album: t.album || '',
@@ -735,9 +964,73 @@ function trackMenu(t) {
   }
   if (t.album) items.push({label: 'Buka album', fn: () => { S.detail = {kind: 'album', key: t.album, title: t.album}; closeNp(); render(); }});
   if (t.artist) items.push({label: 'Buka artis', fn: () => { S.detail = {kind: 'artist', key: t.artist, title: t.artist}; closeNp(); render(); }});
-  if (IS_ADMIN) items.push({label: 'Hapus dari pustaka', danger: true, fn: () => deleteTrack(t)});
+  if (IS_ADMIN && !t.is_local) {
+    items.push({label: 'Edit Info Lagu & Lirik', fn: () => openEditTrack(t)});
+    items.push({label: 'Hapus dari pustaka server', danger: true, fn: () => deleteTrack(t)});
+  }
   sheet(t.title, items);
 }
+
+function localTrackMenu(t) {
+  const items = [
+    {label: 'Putar berikutnya', fn: () => enqueue(t.id, true)},
+    {label: 'Tambah ke antrean', fn: () => enqueue(t.id, false)},
+    {label: 'Hapus dari perangkat ini', danger: true, fn: async () => {
+      await deleteLocalTrack(t.id);
+      S.localTracks = S.localTracks.filter(x => x.id !== t.id);
+      if (cur() && String(cur().id) === String(t.id)) {
+        au.pause(); au.removeAttribute('src'); S.qi = -1; $('#mini').hidden = true; closeNp();
+      }
+      render();
+      toast('Lagu dihapus dari perangkat');
+    }},
+  ];
+  sheet(t.title, items);
+}
+
+/* Edit Metadata Track (Admin) */
+function openEditTrack(t) {
+  const bd = $('#dlg-edit-track');
+  if (!bd) return;
+  $('#ed-id').value = t.id;
+  $('#ed-title').value = t.title || '';
+  $('#ed-artist').value = t.artist || '';
+  $('#ed-album').value = t.album || '';
+  $('#ed-genre').value = t.genre || '';
+  $('#ed-trackno').value = t.track_no ?? '';
+  $('#ed-lyrics').value = t.lyrics || '';
+  bd.classList.add('open');
+  setTimeout(() => $('#ed-title').focus(), 80);
+}
+function closeEditTrack() {
+  $('#dlg-edit-track')?.classList.remove('open');
+}
+$('#dlg-edit-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const id = +$('#ed-id').value;
+  const payload = {
+    title: $('#ed-title').value.trim(),
+    artist: $('#ed-artist').value.trim() || null,
+    album: $('#ed-album').value.trim() || null,
+    genre: $('#ed-genre').value.trim() || null,
+    track_no: $('#ed-trackno').value ? parseInt($('#ed-trackno').value, 10) : null,
+    lyrics: $('#ed-lyrics').value.trim() || null,
+  };
+  const r = await api(`/tracks/${id}`, 'PATCH', payload);
+  if (!r.ok) return toast('Gagal memperbarui lagu');
+  const updated = r.data;
+  const old = S.byId.get(id);
+  if (old) Object.assign(old, updated);
+  closeEditTrack();
+  if (cur() && cur().id === id) {
+    nowUI(old);
+  }
+  render();
+  toast('Info lagu & lirik berhasil diperbarui!');
+});
+$('#dlg-edit-track')?.addEventListener('click', e => {
+  if (e.target.id === 'dlg-edit-track') closeEditTrack();
+});
 
 async function deleteTrack(t) {
   const ok = await confirmDialog({
@@ -789,13 +1082,15 @@ function restoreState() {
   if (!st || st.uid !== window.PM.uid) return;
   S.shuffle = !!st.shuffle; S.repeat = st.repeat || 'off'; S.speed = st.speed || 1;
   const curId = (st.queue || [])[st.qi];
-  S.queue = (st.queue || []).filter(id => S.byId.has(id));
-  S.orig = (st.orig || []).filter(id => S.byId.has(id));
+  const findT = id => S.byId.get(id) || S.localTracks.find(x => x.id === id);
+  S.queue = (st.queue || []).filter(id => !!findT(id));
+  S.orig = (st.orig || []).filter(id => !!findT(id));
   S.qi = S.queue.indexOf(curId);
   syncModes();
   if (S.qi >= 0) {
     S.resume = st.pos || 0;
-    nowUI(S.byId.get(curId));
+    const t = findT(curId);
+    if (t) nowUI(t);
     ppUI();
   } else { S.queue = []; S.orig = []; }
 }
@@ -977,11 +1272,60 @@ const A = {
   },
   'dlg-cancel': () => closePromptDialog(null),
   'dlg-conf-cancel': () => closeConfirmDialog(false),
+  'dlg-edit-cancel': () => closeEditTrack(),
+  'toggle-lyrics': () => {
+    const el = $('#nplyrics');
+    if (!el) return;
+    const willOpen = !el.classList.contains('open');
+    el.classList.toggle('open', willOpen);
+    $('#blyr')?.classList.toggle('on', willOpen);
+    if (willOpen) {
+      const t = cur();
+      const lText = $('#lyrics-text');
+      if (t && t.lyrics && t.lyrics.trim()) {
+        lText.textContent = t.lyrics;
+        lText.classList.remove('lyrics-empty');
+      } else {
+        lText.innerHTML = '<span class="lyrics-empty">Lirik belum tersedia untuk lagu ini.</span>';
+      }
+    }
+  },
+  'pick-local-files': () => $('#local-file-picker')?.click(),
+  'pick-local-folder': () => $('#local-folder-picker')?.click(),
+  'clear-local-music': async () => {
+    const ok = await confirmDialog({
+      title: 'Hapus Semua Musik Perangkat?',
+      desc: 'Semua daftar lagu dari perangkat ini akan dihapus dari browser. File asli di HP/Laptop Anda tetap aman.',
+      okText: 'Hapus Semua',
+      danger: true,
+    });
+    if (!ok) return;
+    await clearAllLocalTracks();
+    S.localTracks = [];
+    render();
+    toast('Semua lagu perangkat telah dibersihkan');
+  },
+  'local-menu': el => {
+    const t = S.localTracks.find(x => x.id === el.dataset.id);
+    if (t) localTrackMenu(t);
+  },
   newpl: () => createPlaylist(null),
   sort: () => sheet('Urutkan lagu', [['title', 'Judul'], ['artist', 'Artis'], ['album', 'Album'], ['recent', 'Terbaru ditambahkan']]
     .map(([k, l]) => ({label: l, on: S.sort === k, fn: () => { S.sort = k; render(); }}))),
-  play: el => playContext(S.ctx, +el.dataset.id),
-  menu: el => { const t = S.byId.get(+el.dataset.id); if (t) trackMenu(t); },
+  play: el => {
+    const rawId = el.dataset.id;
+    const id = rawId.startsWith('dev_') ? rawId : +rawId;
+    playContext(S.ctx, id);
+  },
+  menu: el => {
+    const rawId = el.dataset.id;
+    const id = rawId.startsWith('dev_') ? rawId : +rawId;
+    const t = S.byId.get(id) || S.localTracks.find(x => x.id === id);
+    if (t) {
+      if (t.is_local) localTrackMenu(t);
+      else trackMenu(t);
+    }
+  },
   playall: () => { if (S.ctx.length) playContext(S.ctx, S.ctx[0], false); },
   shuffleall: () => { if (S.ctx.length) playContext(S.ctx, S.ctx[Math.floor(Math.random() * S.ctx.length)], true); },
   'open-np': () => openNp(),
@@ -1020,6 +1364,20 @@ document.addEventListener('click', e => {
 });
 $('#q').addEventListener('input', e => { S.q = e.target.value.trim().toLowerCase(); render(); });
 $('#paywall').addEventListener('click', e => { if (e.target.id === 'paywall') A.pwclose(); });
+
+/* Local File / Folder Pickers */
+$('#local-file-picker')?.addEventListener('change', e => {
+  if (e.target.files && e.target.files.length) {
+    addLocalFiles(e.target.files);
+    e.target.value = '';
+  }
+});
+$('#local-folder-picker')?.addEventListener('change', e => {
+  if (e.target.files && e.target.files.length) {
+    addLocalFiles(e.target.files);
+    e.target.value = '';
+  }
+});
 
 /* ========================================================
    UPLOAD AUDIO (ADMIN): DRAG & DROP & MULTI-BATCH
