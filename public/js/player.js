@@ -521,7 +521,7 @@ function renderPlaylistsView() {
 }
 
 /* ========================================================
-   RENDER MENU 3: SETTING AKUN
+   RENDER MENU 3: SETTING AKUN (Samsung One UI Mobile Style)
    ======================================================== */
 function renderAccountView() {
   const m = S.me || {};
@@ -531,60 +531,68 @@ function renderAccountView() {
   const limit = m.limit || 5;
   const used = m.used || 0;
   const pct = isPrem ? 100 : Math.min(100, Math.round((used / limit) * 100));
-  const remaining = isPrem ? 'Tanpa batas' : `${m.remaining ?? Math.max(0, limit - used)} lagu lagi`;
+  const remaining = isPrem ? 'Tanpa batas' : `${m.remaining ?? Math.max(0, limit - used)} lagu tersisa`;
 
   let h = `
   <div class="ac-wrap">
-    <div class="ac-card">
-      <div class="ac-header">
+    {{-- Profil Hero Card (Samsung One UI Style) --}}
+    <div class="ac-hero-card">
+      <div class="ac-hero-top">
         <div class="ac-avatar">${esc(initial)}</div>
-        <div class="ac-title">
-          <b>${esc(m.name || 'Member')}</b>
-          <span>${esc(m.member_code || '-')}</span>
+        <div class="ac-profile-meta">
+          <div class="ac-profile-name-row">
+            <h2 class="ac-user-name">${esc(m.name || 'Member')}</h2>
+            <span class="ac-role-badge ${isAdmin ? 'admin' : (isPrem ? 'prem' : 'free')}">
+              ${isAdmin ? '🛡️ Admin' : (isPrem ? '⭐ Premium' : 'Free Member')}
+            </span>
+          </div>
+          <button class="ac-id-chip" data-act="copy-ac-id" title="Klik untuk salin ID Member">
+            <span class="ac-id-lbl">ID Member:</span>
+            <b class="ac-id-val">${esc(m.member_code || '-')}</b>
+            <svg class="ic ac-copy-icon"><use href="#i-copy"/></svg>
+          </button>
         </div>
-      </div>
-
-      <div class="ac-id-badge">
-        <span style="font-size:12px;color:var(--mut);">ID Member:</span>
-        <b id="ac-mcode">${esc(m.member_code || '-')}</b>
-        <button class="ib" data-act="copy-ac-id" title="Salin ID Member" style="width:30px;height:30px;"><svg class="ic" style="width:16px;height:16px;"><use href="#i-copy"/></svg></button>
       </div>
 
       <div class="ac-quota-box">
-        <div class="ac-quota-info">
-          <span>Paket: <b style="color:${isPrem ? '#b9a8ff' : '#2ecc71'}">${isAdmin ? 'Admin (Full Akses)' : (isPrem ? 'Premium' : 'Free Member')}</b></span>
-          <span>${isPrem && m.premium_until ? `s/d ${m.premium_until}` : `Sisa: ${remaining}`}</span>
+        <div class="ac-quota-header">
+          <span>Status Kuota Harian</span>
+          <b style="color:${isPrem ? '#38bdf8' : (used >= limit ? 'var(--bad)' : '#2ecc71')}">
+            ${isPrem ? 'Bebas Putar (Unlimited)' : remaining}
+          </b>
         </div>
-        <div class="ac-quota-bar"><i style="width:${pct}%;background:${isPrem ? 'var(--acc)' : (pct >= 100 ? 'var(--bad)' : 'var(--acc)')}"></i></div>
-        <div class="ac-quota-info">
-          <span>${isPrem ? 'Bebas putar sepuasnya' : `Terpakai ${used} dari ${limit} lagu hari ini`}</span>
-          <span>${isPrem ? 'Aktif' : (used >= limit ? 'Batas Habis' : 'Tersedia')}</span>
+        <div class="ac-quota-bar">
+          <i style="width:${pct}%;background:${isPrem ? 'linear-gradient(90deg, #7c5cff, #00c6ff)' : (pct >= 100 ? 'var(--bad)' : 'linear-gradient(90deg, #7c5cff, #00c6ff)')}"></i>
+        </div>
+        <div class="ac-quota-footer">
+          <span>${isPrem ? 'Akses penuh seluruh musik' : `Terpakai ${used} dari ${limit} lagu hari ini`}</span>
+          <span>${isPrem && m.premium_until ? `s/d ${m.premium_until}` : (isPrem ? 'Aktif' : (used >= limit ? 'Batas Habis' : 'Tersedia'))}</span>
         </div>
       </div>
     </div>`;
 
   if (!isPrem) {
     h += `
-    <div class="ac-card">
-      <h3 class="ac-section-title">Langganan Musik Premium</h3>
-      <p style="color:var(--mut);font-size:13px;margin:0 0 12px;line-height:1.5;">
-        Dapatkan akses putar lagu sepuasnya tanpa batasan kuota harian. Lakukan transfer dan kirimkan ID member Anda ke pengelola.
+    <div class="ac-card ac-prem-banner">
+      <div class="ac-prem-top">
+        <div class="ac-prem-badge">⭐ LANGGANAN PREMIUM</div>
+        <span class="ac-prem-price">${esc(m.price || 'Rp 25.000 / bln')}</span>
+      </div>
+      <h3 class="ac-prem-title">Putar Musik Tanpa Batas</h3>
+      <p class="ac-prem-desc">
+        Bebas putar ribuan lagu di Cloud Server setiap hari tanpa batasan kuota.
       </p>
-      <div style="background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13px;margin-bottom:14px;">
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-          <span class="mut">Tarif Langganan:</span>
-          <b>${esc(m.price || 'Rp 25.000 / bulan')}</b>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-          <span class="mut">Info Transfer:</span>
+      <div class="ac-prem-info-box">
+        <div class="ac-prem-info-row">
+          <span class="mut">Info Transfer Bank:</span>
           <b>${esc(m.payment_info || 'Hubungi Admin')}</b>
         </div>
-        <div style="display:flex;justify-content:space-between;">
-          <span class="mut">ID Member Anda:</span>
+        <div class="ac-prem-info-row">
+          <span class="mut">Kirimkan ID Member:</span>
           <b style="color:var(--acc);letter-spacing:0.04em;">${esc(m.member_code || '-')}</b>
         </div>
       </div>
-      <button class="pill acc" data-act="copy-ac-id" style="width:100%;justify-content:center;padding:11px;">
+      <button class="btn-upgrade-copy" data-act="copy-ac-id">
         <svg class="ic"><use href="#i-copy"/></svg> Salin ID Member Anda
       </button>
     </div>`;
@@ -592,29 +600,63 @@ function renderAccountView() {
 
   if (IS_ADMIN) {
     h += `
-    <div class="ac-card">
-      <h3 class="ac-section-title">Manajer Musik & Member (Admin)</h3>
-      <p style="color:var(--mut);font-size:13px;margin:0 0 12px;">
-        Buka panel manajer untuk mengaktifkan status premium member berdasarkan ID member, serta kelola pengguna.
-      </p>
-      <div class="ac-btn-row">
-        <a class="pill acc" href="/admin">
-          <svg class="ic"><use href="#i-shield"/></svg> Buka Manajer Member
-        </a>
+    <div class="ac-group-label">PENGELOLAAN SISTEM</div>
+    <div class="ac-card ac-tile-card" data-act="open-admin-panel">
+      <div class="ac-tile-icon admin">
+        <svg class="ic"><use href="#i-shield"/></svg>
+      </div>
+      <div class="ac-tile-body">
+        <b>Manajer Musik & Member</b>
+        <span>Kelola pengguna, aktivasi paket, dan kuota</span>
+      </div>
+      <div class="ac-tile-arrow">
+        <svg class="ic"><use href="#i-chevron"/></svg>
       </div>
     </div>`;
   }
 
   h += `
-    <div class="ac-card">
-      <h3 class="ac-section-title">Pengaturan Aplikasi</h3>
-      <div class="ac-btn-row">
-        <button class="pill" data-act="reload-lib">
-          <svg class="ic"><use href="#i-speed"/></svg> Muat Ulang Pustaka
-        </button>
-        <button class="pill" data-act="logout" style="color:var(--bad);">
-          <svg class="ic"><use href="#i-close"/></svg> Keluar (Logout)
-        </button>
+    <div class="ac-group-label">PENGATURAN APLIKASI</div>
+    <div class="ac-card ac-settings-group">
+      <div class="ac-tile" data-act="reload-lib">
+        <div class="ac-tile-icon sync">
+          <svg class="ic"><use href="#i-refresh"/></svg>
+        </div>
+        <div class="ac-tile-body">
+          <b>Muat Ulang Pustaka Musik</b>
+          <span>Sinkronisasi ulang daftar lagu dan cover dari server</span>
+        </div>
+        <div class="ac-tile-arrow">
+          <svg class="ic"><use href="#i-chevron"/></svg>
+        </div>
+      </div>
+
+      <div class="ac-divider"></div>
+
+      <div class="ac-tile info-only">
+        <div class="ac-tile-icon info">
+          <svg class="ic"><use href="#i-music"/></svg>
+        </div>
+        <div class="ac-tile-body">
+          <b>Versi Aplikasi</b>
+          <span>PlayerMP3 Web Audio Player (PWA)</span>
+        </div>
+        <span class="ac-badge-info">v1.0</span>
+      </div>
+
+      <div class="ac-divider"></div>
+
+      <div class="ac-tile danger" data-act="logout">
+        <div class="ac-tile-icon logout">
+          <svg class="ic"><use href="#i-logout"/></svg>
+        </div>
+        <div class="ac-tile-body">
+          <b class="txt-danger">Keluar dari Akun</b>
+          <span>Akhiri sesi login di perangkat ini</span>
+        </div>
+        <div class="ac-tile-arrow danger">
+          <svg class="ic"><use href="#i-chevron"/></svg>
+        </div>
       </div>
     </div>
   </div>`;
@@ -658,6 +700,12 @@ function render() {
   const searchBtn = $('#btn-search');
   if (searchBtn) searchBtn.hidden = (nav === 'account' && !d);
   if (nav === 'account' && !d) $('#sb').hidden = true;
+
+  // Sembunyikan chip status dan tombol menu titik tiga di header saat di Setting Akun agar topbar mobile bersih
+  const topChip = $('#chip');
+  if (topChip) topChip.hidden = (nav === 'account' && !d);
+  const topMenu = $('[data-act="topmenu"]');
+  if (topMenu) topMenu.hidden = (nav === 'account' && !d);
 
   // Title di Topbar
   const h1 = $('#title');
@@ -1171,6 +1219,7 @@ const A = {
     reloadTracks();
     toast('Pustaka musik dimuat ulang');
   },
+  'open-admin-panel': () => { location.href = '/admin'; },
   logout: async () => {
     const ok = await confirmDialog({
       title: 'Keluar dari Akun',

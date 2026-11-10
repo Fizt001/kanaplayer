@@ -292,51 +292,366 @@ body { background: #0b0c0f; margin: 0; }
 #up { margin-top: 6px; font-size: 13px; font-weight: 600; }
 
 /* ========================================================
-   SETTING AKUN & PROFIL (Menu Akun)
+   SETTING AKUN & PROFIL (Samsung One UI Mobile Style)
    ======================================================== */
-.ac-wrap { padding: 4px 0 30px; }
-.ac-card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 16px;
+.ac-wrap {
+  padding: 4px 0 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
-.ac-header { display: flex; align-items: center; gap: 16px; }
-.ac-avatar {
-  width: 54px; height: 54px; border-radius: 50%;
-  background: var(--acc); color: #fff;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px; font-weight: 700;
-}
-.ac-title b { display: block; font-size: 18px; margin-bottom: 2px; }
-.ac-title span { color: var(--mut); font-size: 13px; }
 
-.ac-id-badge {
-  display: inline-flex;
+/* Card Base */
+.ac-card {
+  background: linear-gradient(145deg, rgba(22, 24, 30, 0.95), rgba(15, 17, 22, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 20px;
+  padding: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+}
+
+/* Hero Profile Card */
+.ac-hero-card {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.16), rgba(22, 24, 30, 0.96) 70%);
+  border: 1px solid rgba(124, 92, 255, 0.28);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.ac-hero-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.ac-avatar {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c5cff, #4e2be8);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  box-shadow: 0 4px 18px rgba(124, 92, 255, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+
+.ac-profile-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.ac-profile-name-row {
+  display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--panel2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 6px 12px;
-  margin-top: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
 }
-.ac-id-badge b { font-size: 16px; letter-spacing: 0.05em; color: var(--acc); }
 
-.ac-quota-box { margin-top: 14px; }
+.ac-user-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ac-role-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.ac-role-badge.admin {
+  background: rgba(124, 92, 255, 0.22);
+  color: #b9a8ff;
+  border: 1px solid rgba(124, 92, 255, 0.35);
+}
+.ac-role-badge.prem {
+  background: rgba(46, 204, 113, 0.2);
+  color: #2ecc71;
+  border: 1px solid rgba(46, 204, 113, 0.3);
+}
+.ac-role-badge.free {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--mut);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ac-id-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+  padding: 4px 12px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.ac-id-chip:active {
+  background: rgba(124, 92, 255, 0.25);
+  transform: scale(0.97);
+}
+.ac-id-lbl {
+  font-size: 11px;
+  color: var(--mut);
+}
+.ac-id-val {
+  font-size: 13px;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+.ac-copy-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--acc);
+}
+
+/* Quota Section */
+.ac-quota-box {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ac-quota-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.ac-quota-header span { color: var(--mut); }
 .ac-quota-bar {
   height: 8px;
-  background: var(--panel2);
+  background: rgba(0, 0, 0, 0.4);
   border-radius: 99px;
   overflow: hidden;
-  margin: 8px 0;
+  margin-bottom: 8px;
 }
-.ac-quota-bar i { display: block; height: 100%; background: var(--acc); width: 0%; border-radius: 99px; transition: width .3s ease; }
-.ac-quota-info { display: flex; justify-content: space-between; font-size: 13px; color: var(--mut); }
+.ac-quota-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  transition: width .3s ease;
+}
+.ac-quota-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--mut);
+}
 
-.ac-section-title { font-size: 15px; font-weight: 700; margin: 0 0 10px; color: var(--txt); }
-.ac-btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+/* Section Title Label */
+.ac-group-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--mut);
+  padding: 8px 4px 0;
+  text-transform: uppercase;
+}
+
+/* Action Tile Card (Admin / Clickable) */
+.ac-tile-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  transition: all .15s ease;
+  padding: 16px 20px;
+}
+.ac-tile-card:active {
+  background: rgba(124, 92, 255, 0.12);
+  transform: scale(0.985);
+}
+
+/* Settings Group List (Samsung One UI List Container) */
+.ac-settings-group {
+  padding: 0;
+  overflow: hidden;
+}
+
+.ac-tile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 18px;
+  cursor: pointer;
+  transition: background .12s ease;
+}
+.ac-tile:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+.ac-tile.info-only {
+  cursor: default;
+}
+.ac-tile.info-only:active {
+  background: transparent;
+}
+
+.ac-tile-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ac-tile-icon.admin {
+  background: rgba(124, 92, 255, 0.18);
+  color: var(--acc);
+}
+.ac-tile-icon.sync {
+  background: rgba(0, 198, 255, 0.15);
+  color: #38bdf8;
+}
+.ac-tile-icon.info {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--mut);
+}
+.ac-tile-icon.logout {
+  background: rgba(255, 92, 108, 0.15);
+  color: var(--bad);
+}
+.ac-tile-icon .ic {
+  width: 20px;
+  height: 20px;
+}
+
+.ac-tile-body {
+  flex: 1;
+  min-width: 0;
+}
+.ac-tile-body b {
+  display: block;
+  font-size: 14px;
+  color: var(--txt);
+  margin-bottom: 2px;
+}
+.ac-tile-body span {
+  display: block;
+  font-size: 12px;
+  color: var(--mut);
+  line-height: 1.35;
+}
+
+.ac-tile-arrow {
+  color: var(--mut);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.ac-tile-arrow .ic {
+  width: 18px;
+  height: 18px;
+}
+.ac-tile-arrow.danger {
+  color: var(--bad);
+}
+
+.ac-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 0 18px;
+}
+
+.ac-badge-info {
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--mut);
+}
+
+.txt-danger {
+  color: var(--bad) !important;
+}
+
+/* Premium Upgrade Banner */
+.ac-prem-banner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(22, 24, 30, 0.96));
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.ac-prem-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.ac-prem-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f59e0b;
+  letter-spacing: 0.05em;
+}
+.ac-prem-price {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f59e0b;
+}
+.ac-prem-title {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+}
+.ac-prem-desc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--mut);
+  line-height: 1.4;
+}
+.ac-prem-info-box {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+.ac-prem-info-row {
+  display: flex;
+  justify-content: space-between;
+}
+.btn-upgrade-copy {
+  width: 100%;
+  padding: 12px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  border-radius: 99px !important;
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 18px rgba(245, 158, 11, 0.4) !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.btn-upgrade-copy:active {
+  transform: scale(0.98);
+}
 
 /* ========================================================
    DEVICE MUSIC VIEW
