@@ -276,33 +276,48 @@ function renderPlaylistsView() {
   const q = S.q;
   let h = `
   <div class="pl-banner">
-    <div>
+    <div class="pl-banner-text">
       <h3>Koleksi Playlist</h3>
       <p>Buat daftar putar sesuai selera dan lagu favorit Anda.</p>
     </div>
-    <button class="pill acc" data-act="newpl">
-      <svg class="ic"><use href="#i-add"/></svg> Buat Playlist
+    <button class="btn-newpl" data-act="newpl">
+      <svg class="ic"><use href="#i-add"/></svg>
+      <span>+ Buat Playlist</span>
     </button>
   </div>`;
 
   const smart = [
-    ['fav', 'Favorit', 'heart-on', S.tracks.filter(t => t.favorite).length],
-    ['recent', 'Terakhir diputar', 'timer', Math.min(50, S.tracks.filter(t => t.last_played_at).length)],
-    ['most', 'Paling sering diputar', 'repeat', Math.min(50, S.tracks.filter(t => t.play_count > 0).length)],
+    ['fav', 'Favorit', 'heart-on', S.tracks.filter(t => t.favorite).length, 'smart-fav'],
+    ['recent', 'Terakhir diputar', 'timer', Math.min(50, S.tracks.filter(t => t.last_played_at).length), 'smart-recent'],
+    ['most', 'Paling sering diputar', 'repeat', Math.min(50, S.tracks.filter(t => t.play_count > 0).length), 'smart-most'],
   ].filter(s => matches(q, s[1]));
 
-  h += smart.map(s => `<div class="row" data-act="opensmart" data-kind="${s[0]}">
-      <div class="cv">${icon(s[2])}</div><div class="tx"><b>${s[1]}</b><span>${s[3]} lagu</span></div></div>`).join('');
+  h += smart.map(s => `
+    <div class="pl-card-row" data-act="opensmart" data-kind="${s[0]}">
+      <div class="cv ${s[4]}">${icon(s[2])}</div>
+      <div class="tx">
+        <b>${s[1]}</b>
+        <span>${s[3]} lagu</span>
+      </div>
+    </div>`).join('');
 
   const customPlaylists = S.playlists.filter(p => matches(q, p.name));
   if (customPlaylists.length) {
-    h += `<div class="tb" style="margin-top:14px;"><span style="font-weight:700;color:var(--txt);">Daftar Playlist Saya</span><span class="sp"></span><span>${customPlaylists.length} playlist</span></div>`;
+    h += `<div class="tb" style="margin-top:18px;margin-bottom:6px;"><span style="font-weight:700;color:var(--txt);font-size:15px;">Daftar Playlist Saya</span><span class="sp"></span><span style="font-size:13px;">${customPlaylists.length} playlist</span></div>`;
     h += customPlaylists.map(p => {
       const first = S.byId.get(p.track_ids[0]);
-      return `<div class="row" data-act="openpl" data-id="${p.id}">${coverHtml(first && first.cover_url)}
-        <div class="tx"><b>${esc(p.name)}</b><span>${p.track_ids.length} lagu</span></div>
-        <button class="ib" data-act="plmenu-row" data-id="${p.id}" aria-label="Opsi playlist">${icon('more')}</button>
-      </div>`;
+      const cvHtml = first && first.cover_url
+        ? coverHtml(first.cover_url)
+        : `<div class="cv smart-custom">${icon('playlist')}</div>`;
+      return `
+        <div class="pl-card-row" data-act="openpl" data-id="${p.id}">
+          ${cvHtml}
+          <div class="tx">
+            <b>${esc(p.name)}</b>
+            <span>${p.track_ids.length} lagu</span>
+          </div>
+          <button class="ib" data-act="plmenu-row" data-id="${p.id}" aria-label="Opsi playlist">${icon('more')}</button>
+        </div>`;
     }).join('');
   } else if (!smart.length) {
     h += `<div class="empty">${q ? 'Tidak ada playlist yang cocok.' : 'Belum ada playlist.'}</div>`;
