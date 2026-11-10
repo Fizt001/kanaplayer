@@ -242,11 +242,35 @@ function getAudioDuration(file) {
 }
 
 async function addLocalFiles(fileList) {
+  const m = S.me || {};
+  const isFree = !m.premium && !m.is_admin;
+  const FREE_LOCAL_LIMIT = 5;
+
+  if (isFree && S.localTracks.length >= FREE_LOCAL_LIMIT) {
+    paywall({
+      message: `Member Free dibatasi maksimal ${FREE_LOCAL_LIMIT} lagu perangkat. Silakan upgrade ke Premium untuk menambah lagu tanpa batas!`,
+      member_code: m.member_code,
+      payment_info: m.payment_info,
+      price: m.price,
+    });
+    return;
+  }
+
   const files = [...fileList].filter(f => f.type.startsWith('audio/') || /\.(mp3|m4a|aac|ogg|opus|wav|flac)$/i.test(f.name));
   if (!files.length) return toast('Tidak ada file audio yang cocok.');
-  toast(`Memproses ${files.length} lagu dari perangkat...`);
+
+  let toProcess = files;
+  if (isFree) {
+    const remainingSlots = Math.max(0, FREE_LOCAL_LIMIT - S.localTracks.length);
+    if (files.length > remainingSlots) {
+      toProcess = files.slice(0, remainingSlots);
+      toast(`Member Free dibatasi ${FREE_LOCAL_LIMIT} lagu. Mengambil ${toProcess.length} lagu pertama.`);
+    }
+  }
+
+  toast(`Memproses ${toProcess.length} lagu dari perangkat...`);
   let count = 0;
-  for (const f of files) {
+  for (const f of toProcess) {
     const id = 'dev_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     let clean = f.name.replace(/\.[^/.]+$/, '');
     let artist = 'Perangkat Lokal';
@@ -376,9 +400,12 @@ function renderMusicView() {
         <input id="file" type="file" accept="audio/*,.flac,.m4a,.opus" multiple hidden><div id="up"></div></div>`;
     }
     if (!list.length) return h + `<div class="empty">${q ? 'Tidak ada lagu yang cocok.' : 'Pustaka musik masih kosong. Tambahkan lagu dengan drag & drop.'}</div>`;
-    h += `<div class="tb"><button class="pill acc" data-act="playall">${icon('play')}Putar</button>
-      <button class="pill" data-act="shuffleall">${icon('shuffle')}Acak</button><span class="sp"></span>
-      <button class="lnk" data-act="sort">${list.length} lagu · ${labels[S.sort]} ▾</button></div>`;
+    h += `<div class="tb">
+      <button class="tb-btn primary" data-act="playall">${icon('play')}<span>Putar</span></button>
+      <button class="tb-btn secondary ${S.shuffle ? 'on' : ''}" data-act="shuffleall">${icon('shuffle')}<span>Acak</span></button>
+      <span class="sp"></span>
+      <button class="lnk" data-act="sort">${list.length} lagu · ${labels[S.sort]} ▾</button>
+    </div>`;
     return h + list.map(trackRow).join('');
   }
 
@@ -418,11 +445,17 @@ function renderDeviceView() {
   let list = S.localTracks.filter(t => matches(q, t.title, t.artist, t.album));
   S.ctx = list.map(t => t.id);
 
+  const m = S.me || {};
+  const isFree = !m.premium && !m.is_admin;
+  const bannerSub = isFree
+    ? `Putar lagu dari penyimpanan HP/Laptop. <b>Member Free dibatasi maks. 5 lagu</b> &bull; Upgrade Premium untuk akses tanpa batas.`
+    : `Putar lagu dari penyimpanan HP atau Laptop Anda tanpa upload ke server. Akses Premium: Bebas tanpa batas kuota.`;
+
   let h = `
   <div class="device-banner">
     <div class="device-banner-text">
       <h3>Musik di Perangkat Ini</h3>
-      <p>Putar lagu dari penyimpanan HP atau Laptop Anda tanpa upload ke server. Gratis sepuasnya tanpa batas kuota.</p>
+      <p>${bannerSub}</p>
     </div>
     <div class="device-actions">
       <button class="btn-device-add" data-act="pick-local-files">
@@ -453,10 +486,10 @@ function renderDeviceView() {
 
   h += `
   <div class="tb">
-    <button class="pill acc" data-act="playall">${icon('play')}Putar</button>
-    <button class="pill" data-act="shuffleall">${icon('shuffle')}Acak</button>
+    <button class="tb-btn primary" data-act="playall">${icon('play')}<span>Putar</span></button>
+    <button class="tb-btn secondary ${S.shuffle ? 'on' : ''}" data-act="shuffleall">${icon('shuffle')}<span>Acak</span></button>
     <span class="sp"></span>
-    <span style="font-size:13px;color:var(--mut);">${list.length} lagu</span>
+    <span style="font-size:12.5px;color:var(--mut);">${isFree ? `${list.length}/5 lagu (Free)` : `${list.length} lagu`}</span>
     <button class="ib" data-act="clear-local-music" title="Hapus semua lagu perangkat" aria-label="Hapus semua">${icon('close')}</button>
   </div>`;
 
@@ -685,8 +718,8 @@ function renderDetail() {
   S.ctx = list.map(t => t.id);
   let h = `<div class="tb">`;
   if (list.length) {
-    h += `<button class="pill acc" data-act="playall">${icon('play')}Putar</button>
-      <button class="pill" data-act="shuffleall">${icon('shuffle')}Acak</button>`;
+    h += `<button class="tb-btn primary" data-act="playall">${icon('play')}<span>Putar</span></button>
+      <button class="tb-btn secondary ${S.shuffle ? 'on' : ''}" data-act="shuffleall">${icon('shuffle')}<span>Acak</span></button>`;
   }
   h += `<span class="sp"></span><span>${list.length} lagu</span>`;
   if (d.kind === 'playlist') {
@@ -771,8 +804,21 @@ async function playAt(i, startPos = 0) {
   const t = S.byId.get(id) || S.localTracks.find(x => x.id === id);
   if (!t) return false;
 
-  // Lagu dari perangkat lokal: Putar langsung via Blob URL tanpa batasan kuota server
+  // Lagu dari perangkat lokal: Putar via Blob URL (cek kuota harian jika member Free)
   if (t.is_local || String(id).startsWith('dev_')) {
+    const m = S.me || {};
+    const isFree = !m.premium && !m.is_admin;
+    if (isFree && m.remaining !== null && m.remaining <= 0) {
+      au.pause();
+      paywall({
+        message: 'Kuota harian Anda habis. Upgrade ke Premium untuk memutar musik tanpa batas!',
+        member_code: m.member_code,
+        payment_info: m.payment_info,
+        price: m.price,
+      });
+      return false;
+    }
+
     if (!t.blobUrl && t.blob) {
       t.blobUrl = URL.createObjectURL(t.blob);
     }
@@ -1388,8 +1434,25 @@ const A = {
       else trackMenu(t);
     }
   },
-  playall: () => { if (S.ctx.length) playContext(S.ctx, S.ctx[0], false); },
-  shuffleall: () => { if (S.ctx.length) playContext(S.ctx, S.ctx[Math.floor(Math.random() * S.ctx.length)], true); },
+  playall: () => {
+    if (!S.ctx || !S.ctx.length) return toast('Tidak ada lagu untuk diputar');
+    S.shuffle = false;
+    playContext(S.ctx, S.ctx[0], false);
+    if (au.src) { au.currentTime = 0; au.play().catch(() => {}); }
+    toast(`Memutar semua (${S.ctx.length} lagu)`);
+    syncModes();
+    render();
+  },
+  shuffleall: () => {
+    if (!S.ctx || !S.ctx.length) return toast('Tidak ada lagu untuk diputar');
+    S.shuffle = true;
+    const startId = S.ctx[Math.floor(Math.random() * S.ctx.length)];
+    playContext(S.ctx, startId, true);
+    if (au.src) { au.currentTime = 0; au.play().catch(() => {}); }
+    toast(S.ctx.length > 1 ? `Memutar acak (${S.ctx.length} lagu)` : 'Mode acak diaktifkan');
+    syncModes();
+    render();
+  },
   'open-np': () => openNp(),
   'close-np': () => { if (history.state && history.state.np) history.back(); else closeNp(); },
   'np-menu': () => { const t = cur(); if (t) trackMenu(t); },
