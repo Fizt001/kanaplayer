@@ -549,7 +549,6 @@ function renderAccountView() {
 
   let h = `
   <div class="ac-wrap">
-    {{-- Profil Hero Card (Samsung One UI Style) --}}
     <div class="ac-hero-card">
       <div class="ac-hero-top">
         <div class="ac-avatar">${esc(initial)}</div>

@@ -78,7 +78,7 @@
       <div class="sb-section-title" style="margin-top:16px;">Aksi Cepat</div>
       <button class="sb-link ghost" data-act="newpl">
         <svg class="ic"><use href="#i-add"/></svg>
-        <span>+ Buat Playlist</span>
+        <span>Buat Playlist</span>
       </button>
       @if(auth()->user()->is_admin)
       <a class="sb-link ghost" href="/admin">
