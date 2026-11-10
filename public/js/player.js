@@ -71,6 +71,76 @@ function sheet(title, items) {
 const closeSheet = () => $('#sheet').classList.remove('open');
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
 
+/* ---------- custom dialog modals (pengganti prompt & confirm) ---------- */
+let dlgResolve = null;
+function promptDialog({ title = 'Buat Playlist', desc = '', label = 'Nama Playlist', placeholder = '', initialValue = '', submitText = 'Simpan' }) {
+  return new Promise(resolve => {
+    dlgResolve = resolve;
+    const bd = $('#dlg-form');
+    if (!bd) return resolve(null);
+    $('#dlg-form-title').textContent = title;
+    $('#dlg-form-desc').textContent = desc;
+    $('#dlg-label').textContent = label;
+    const input = $('#dlg-input');
+    input.placeholder = placeholder;
+    input.value = initialValue;
+    $('#dlg-form-submit').textContent = submitText;
+    bd.classList.add('open');
+    setTimeout(() => { input.focus(); input.select(); }, 80);
+  });
+}
+
+function closePromptDialog(val = null) {
+  const bd = $('#dlg-form');
+  if (bd) bd.classList.remove('open');
+  if (dlgResolve) {
+    const fn = dlgResolve;
+    dlgResolve = null;
+    fn(val);
+  }
+}
+
+let confResolve = null;
+function confirmDialog({ title = 'Konfirmasi', desc = 'Apakah Anda yakin?', okText = 'Lanjutkan', danger = true }) {
+  return new Promise(resolve => {
+    confResolve = resolve;
+    const bd = $('#dlg-confirm');
+    if (!bd) return resolve(false);
+    $('#dlg-conf-title').textContent = title;
+    $('#dlg-conf-desc').textContent = desc;
+    const btnOk = $('#dlg-conf-ok');
+    btnOk.textContent = okText;
+    btnOk.className = 'pill ' + (danger ? 'danger' : 'acc');
+    const iconEl = $('#dlg-conf-icon');
+    if (iconEl) iconEl.className = 'dlg-icon ' + (danger ? 'danger' : '');
+    bd.classList.add('open');
+  });
+}
+
+function closeConfirmDialog(ok = false) {
+  const bd = $('#dlg-confirm');
+  if (bd) bd.classList.remove('open');
+  if (confResolve) {
+    const fn = confResolve;
+    confResolve = null;
+    fn(ok);
+  }
+}
+
+// Handler form dialog & backdrop
+$('#dlg-form-body')?.addEventListener('submit', e => {
+  e.preventDefault();
+  const v = ($('#dlg-input').value || '').trim();
+  closePromptDialog(v || null);
+});
+$('#dlg-form')?.addEventListener('click', e => {
+  if (e.target.id === 'dlg-form') closePromptDialog(null);
+});
+$('#dlg-conf-ok')?.addEventListener('click', () => closeConfirmDialog(true));
+$('#dlg-confirm')?.addEventListener('click', e => {
+  if (e.target.id === 'dlg-confirm') closeConfirmDialog(false);
+});
+
 /* ---------- data loading ---------- */
 async function loadAll() {
   const [t, p, m] = await Promise.all([api('/tracks'), api('/playlists'), api('/me')]);
@@ -603,11 +673,24 @@ function upsertPl(p) {
   S.playlists.sort((a, b) => cmp(a.name, b.name));
 }
 async function createPlaylist(thenAdd) {
-  const name = (prompt('Nama playlist:') || '').trim(); if (!name) return;
+  const name = await promptDialog({
+    title: 'Buat Playlist Baru',
+    desc: 'Beri nama untuk daftar putar lagu Anda',
+    label: 'Nama Playlist',
+    placeholder: 'Misal: Santai Sore, Mood Booster, Hits...',
+    initialValue: '',
+    submitText: 'Buat Playlist',
+  });
+  if (!name) return;
   const r = await api('/playlists', 'POST', {name});
   if (!r.ok) return toast('Gagal membuat playlist');
   upsertPl(r.data);
-  if (thenAdd) { await addToPlaylist(r.data.id, thenAdd); } else { render(); toast(`Playlist "${r.data.name}" dibuat`); }
+  if (thenAdd) {
+    await addToPlaylist(r.data.id, thenAdd);
+  } else {
+    render();
+    toast(`Playlist "${r.data.name}" berhasil dibuat!`);
+  }
 }
 async function addToPlaylist(plId, trackId) {
   const r = await api(`/playlists/${plId}/tracks`, 'POST', {track_id: trackId});
@@ -642,7 +725,13 @@ function trackMenu(t) {
 }
 
 async function deleteTrack(t) {
-  if (!confirm(`Hapus "${t.title}" dari pustaka? File akan dihapus permanen.`)) return;
+  const ok = await confirmDialog({
+    title: 'Hapus Lagu dari Pustaka?',
+    desc: `Lagu "${t.title}" akan dihapus permanen dari server dan pustaka.`,
+    okText: 'Hapus Lagu',
+    danger: true,
+  });
+  if (!ok) return;
   const r = await api(`/tracks/${t.id}`, 'DELETE');
   if (!r.ok) return toast('Gagal menghapus');
   const playingId = cur() && cur().id;
@@ -772,15 +861,29 @@ const A = {
     reloadTracks();
     toast('Pustaka musik dimuat ulang');
   },
-  logout: () => {
-    if (confirm('Yakin ingin keluar?')) $('#logout').submit();
+  logout: async () => {
+    const ok = await confirmDialog({
+      title: 'Keluar dari Akun',
+      desc: 'Apakah Anda yakin ingin keluar dari sesi akun PlayerMP3?',
+      okText: 'Keluar',
+      danger: true,
+    });
+    if (ok) $('#logout').submit();
   },
   topmenu: () => {
     const items = [];
     if (IS_ADMIN) items.push({label: 'Manajer Member (Admin)', fn: () => { location.href = '/admin'; }});
     items.push({label: 'Muat ulang pustaka', fn: () => { reloadTracks(); toast('Pustaka dimuat ulang'); }});
     items.push({label: 'Setting akun', fn: () => { S.nav = 'account'; S.detail = null; render(); }});
-    items.push({label: 'Keluar', danger: true, fn: () => $('#logout').submit()});
+    items.push({label: 'Keluar', danger: true, fn: async () => {
+      const ok = await confirmDialog({
+        title: 'Keluar dari Akun',
+        desc: 'Apakah Anda yakin ingin keluar dari sesi akun PlayerMP3?',
+        okText: 'Keluar',
+        danger: true,
+      });
+      if (ok) $('#logout').submit();
+    }});
     sheet(S.me ? `${S.me.name} · ${S.me.member_code}` : 'Menu', items);
   },
   open: el => {
@@ -803,14 +906,28 @@ const A = {
     sheet(p.name, [
       {label: 'Buka playlist', fn: () => { S.detail = {kind: 'playlist', key: p.id, title: p.name}; render(); }},
       {label: 'Ganti nama', fn: async () => {
-        const n = (prompt('Nama baru:', p.name) || '').trim(); if (!n) return;
+        const n = await promptDialog({
+          title: 'Ubah Nama Playlist',
+          desc: 'Masukkan nama baru untuk playlist ini',
+          label: 'Nama Playlist',
+          placeholder: 'Nama playlist...',
+          initialValue: p.name,
+          submitText: 'Simpan',
+        });
+        if (!n) return;
         const r = await api(`/playlists/${p.id}`, 'PATCH', {name: n});
-        if (r.ok) { upsertPl(r.data); render(); }
+        if (r.ok) { upsertPl(r.data); render(); toast('Nama playlist diperbarui'); }
       }},
       {label: 'Hapus playlist', danger: true, fn: async () => {
-        if (!confirm(`Hapus playlist "${p.name}"?`)) return;
+        const ok = await confirmDialog({
+          title: 'Hapus Playlist?',
+          desc: `Playlist "${p.name}" akan dihapus permanen. Lagu tetap aman di pustaka.`,
+          okText: 'Hapus Playlist',
+          danger: true,
+        });
+        if (!ok) return;
         const r = await api(`/playlists/${p.id}`, 'DELETE');
-        if (r.ok) { S.playlists = S.playlists.filter(x => x.id !== p.id); render(); }
+        if (r.ok) { S.playlists = S.playlists.filter(x => x.id !== p.id); render(); toast('Playlist dihapus'); }
       }},
     ]);
   },
@@ -818,17 +935,33 @@ const A = {
     const p = S.playlists.find(x => x.id === S.detail.key); if (!p) return;
     sheet(p.name, [
       {label: 'Ganti nama', fn: async () => {
-        const n = (prompt('Nama baru:', p.name) || '').trim(); if (!n) return;
+        const n = await promptDialog({
+          title: 'Ubah Nama Playlist',
+          desc: 'Masukkan nama baru untuk playlist ini',
+          label: 'Nama Playlist',
+          placeholder: 'Nama playlist...',
+          initialValue: p.name,
+          submitText: 'Simpan',
+        });
+        if (!n) return;
         const r = await api(`/playlists/${p.id}`, 'PATCH', {name: n});
-        if (r.ok) { upsertPl(r.data); S.detail.title = r.data.name; render(); }
+        if (r.ok) { upsertPl(r.data); S.detail.title = r.data.name; render(); toast('Nama playlist diperbarui'); }
       }},
       {label: 'Hapus playlist', danger: true, fn: async () => {
-        if (!confirm(`Hapus playlist "${p.name}"?`)) return;
+        const ok = await confirmDialog({
+          title: 'Hapus Playlist?',
+          desc: `Playlist "${p.name}" akan dihapus permanen. Lagu tetap aman di pustaka.`,
+          okText: 'Hapus Playlist',
+          danger: true,
+        });
+        if (!ok) return;
         const r = await api(`/playlists/${p.id}`, 'DELETE');
-        if (r.ok) { S.playlists = S.playlists.filter(x => x.id !== p.id); S.detail = null; render(); }
+        if (r.ok) { S.playlists = S.playlists.filter(x => x.id !== p.id); S.detail = null; render(); toast('Playlist dihapus'); }
       }},
     ]);
   },
+  'dlg-cancel': () => closePromptDialog(null),
+  'dlg-conf-cancel': () => closeConfirmDialog(false),
   newpl: () => createPlaylist(null),
   sort: () => sheet('Urutkan lagu', [['title', 'Judul'], ['artist', 'Artis'], ['album', 'Album'], ['recent', 'Terbaru ditambahkan']]
     .map(([k, l]) => ({label: l, on: S.sort === k, fn: () => { S.sort = k; render(); }}))),

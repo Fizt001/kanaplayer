@@ -198,6 +198,46 @@
     </div>
   </div>
 
+  {{-- Modal Dialog Form (Create / Rename Playlist) --}}
+  <div id="dlg-form" class="dlg-backdrop">
+    <div class="dlg-box">
+      <div class="dlg-header">
+        <div class="dlg-icon"><svg class="ic"><use href="#i-playlist"/></svg></div>
+        <div>
+          <h3 id="dlg-form-title">Buat Playlist Baru</h3>
+          <span class="mut" id="dlg-form-desc">Beri nama untuk playlist Anda</span>
+        </div>
+      </div>
+      <form id="dlg-form-body" onsubmit="return false;">
+        <div class="dlg-input-wrap">
+          <label for="dlg-input" id="dlg-label">Nama Playlist</label>
+          <input id="dlg-input" type="text" maxlength="80" autocomplete="off" placeholder="Misal: Santai Sore, Mood Booster, Hits...">
+        </div>
+        <div class="dlg-actions">
+          <button type="button" class="pill ghost" data-act="dlg-cancel">Batal</button>
+          <button type="submit" class="pill acc" id="dlg-form-submit">Buat Playlist</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {{-- Modal Konfirmasi Kustom (Hapus Lagu / Playlist / Logout) --}}
+  <div id="dlg-confirm" class="dlg-backdrop">
+    <div class="dlg-box">
+      <div class="dlg-header">
+        <div class="dlg-icon danger" id="dlg-conf-icon"><svg class="ic"><use href="#i-close"/></svg></div>
+        <div>
+          <h3 id="dlg-conf-title">Konfirmasi</h3>
+          <span class="mut" id="dlg-conf-desc">Apakah Anda yakin?</span>
+        </div>
+      </div>
+      <div class="dlg-actions">
+        <button type="button" class="pill ghost" data-act="dlg-conf-cancel">Batal</button>
+        <button type="button" class="pill danger" id="dlg-conf-ok">Lanjutkan</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast"></div>
   <audio id="au" preload="none"></audio>
   <form id="logout" method="post" action="/logout">@csrf</form>
