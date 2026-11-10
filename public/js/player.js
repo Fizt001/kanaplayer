@@ -9,9 +9,12 @@ const au = $('#au');
 
 const S = {
   tracks: [], byId: new Map(), playlists: [], me: null,
-  tab: 'tracks', detail: null, q: '', sort: 'title',
-  groups: [],                       // cache grup yang sedang tampil (album/artis/genre)
-  ctx: [],                          // id lagu pada daftar yang sedang tampil
+  nav: 'music',                     // 'music' | 'playlists' | 'account'
+  tab: 'tracks',                    // sub-tab musik: 'tracks' | 'albums' | 'artists' | 'genres'
+  detail: null,                     // { kind: 'album'|'artist'|'genre'|'playlist'|'fav'|'recent'|'most', key, title }
+  q: '', sort: 'title',
+  groups: [],                       // cache grup album/artis/genre
+  ctx: [],                          // id lagu pada daftar aktif
   queue: [], orig: [], qi: -1, shuffle: false, repeat: 'off', speed: 1,
   sleep: null, resume: null, uploading: false,
 };
@@ -30,7 +33,8 @@ const cur = () => S.byId.get(S.queue[S.qi]);
 
 let toastT;
 function toast(msg) {
-  const el = $('#toast'); el.textContent = msg; el.classList.add('show');
+  const el = $('#toast'); if (!el) return;
+  el.textContent = msg; el.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2400);
 }
 
@@ -44,6 +48,7 @@ async function api(url, method = 'GET', body) {
 }
 
 function coverEl(el, t) {
+  if (!el) return;
   if (t && t.cover_url) { el.style.backgroundImage = `url("${t.cover_url}")`; el.classList.add('has'); }
   else { el.style.backgroundImage = ''; el.classList.remove('has'); }
 }
@@ -66,13 +71,16 @@ function sheet(title, items) {
 const closeSheet = () => $('#sheet').classList.remove('open');
 $('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') closeSheet(); });
 
-/* ---------- data ---------- */
+/* ---------- data loading ---------- */
 async function loadAll() {
   const [t, p, m] = await Promise.all([api('/tracks'), api('/playlists'), api('/me')]);
   S.tracks = Array.isArray(t.data) ? t.data : [];
   S.byId = new Map(S.tracks.map(x => [x.id, x]));
   S.playlists = Array.isArray(p.data) ? p.data : [];
-  S.me = m.data; renderMe(); render(); restoreState();
+  S.me = m.data;
+  renderMe();
+  render();
+  restoreState();
 }
 async function reloadTracks() {
   const t = await api('/tracks');
@@ -83,12 +91,20 @@ async function reloadTracks() {
 
 function renderMe() {
   const m = S.me; if (!m) return;
+  const chipText = m.premium ? (m.is_admin ? 'Admin' : 'Premium') : `Free ${m.used}/${m.limit}`;
   const chip = $('#chip');
-  chip.textContent = m.premium ? (m.is_admin ? 'Admin' : 'Premium') : `Free ${m.used}/${m.limit}`;
-  chip.classList.toggle('prem', !!m.premium);
+  if (chip) {
+    chip.textContent = chipText;
+    chip.classList.toggle('prem', !!m.premium);
+  }
+  const sbChip = $('#sb-chip');
+  if (sbChip) {
+    sbChip.textContent = chipText;
+    sbChip.classList.toggle('prem', !!m.premium);
+  }
 }
 
-/* ---------- pengelompokan ---------- */
+/* ---------- data filtering & sorting ---------- */
 function groupBy(list, keyFn) {
   const map = new Map();
   list.forEach(t => { const k = keyFn(t) || ''; if (!map.has(k)) map.set(k, []); map.get(k).push(t); });
@@ -122,7 +138,6 @@ function detailTracks(d) {
   return [];
 }
 
-/* ---------- render daftar ---------- */
 function trackRow(t) {
   const on = cur() && cur().id === t.id;
   return `<div class="row ${on ? 'on' : ''}" data-act="play" data-id="${t.id}">
@@ -133,17 +148,23 @@ function trackRow(t) {
   </div>`;
 }
 
-function renderTab() {
+/* ========================================================
+   RENDER MENU 1: PUTAR MUSIK (Sub-tab Lagu, Album, Artis, Genre)
+   ======================================================== */
+function renderMusicView() {
   const q = S.q, tab = S.tab;
   S.groups = [];
+
   if (tab === 'tracks') {
     const list = sortTracks(S.tracks.filter(t => matches(q, t.title, t.artist, t.album, t.genre)));
     S.ctx = list.map(t => t.id);
     const labels = {title: 'Judul', artist: 'Artis', album: 'Album', recent: 'Terbaru'};
     let h = '';
-    if (IS_ADMIN && !q) h += `<div id="drop">Seret &amp; lepas file audio ke sini, atau klik untuk memilih
-      <input id="file" type="file" accept="audio/*,.flac,.m4a,.opus" multiple hidden><div id="up"></div></div>`;
-    if (!list.length) return h + `<div class="empty">${q ? 'Tidak ada hasil.' : 'Pustaka masih kosong.'}</div>`;
+    if (IS_ADMIN && !q) {
+      h += `<div id="drop">Seret &amp; lepas file audio ke sini, atau klik untuk memilih
+        <input id="file" type="file" accept="audio/*,.flac,.m4a,.opus" multiple hidden><div id="up"></div></div>`;
+    }
+    if (!list.length) return h + `<div class="empty">${q ? 'Tidak ada lagu yang cocok.' : 'Pustaka musik masih kosong. Tambahkan lagu dengan drag & drop.'}</div>`;
     h += `<div class="tb"><button class="pill acc" data-act="playall">${icon('play')}Putar</button>
       <button class="pill" data-act="shuffleall">${icon('shuffle')}Acak</button><span class="sp"></span>
       <button class="lnk" data-act="sort">${list.length} lagu · ${labels[S.sort]} ▾</button></div>`;
@@ -154,7 +175,7 @@ function renderTab() {
     const gs = groupBy(S.tracks, t => t.album).filter(g => matches(q, g.key || 'Tanpa album', g.tracks.map(t => t.artist).join(' ')))
       .sort((a, b) => cmp(a.key || '\uffff', b.key || '\uffff'));
     S.groups = gs;
-    if (!gs.length) return `<div class="empty">Belum ada album.</div>`;
+    if (!gs.length) return `<div class="empty">${q ? 'Tidak ada album yang cocok.' : 'Belum ada album.'}</div>`;
     return `<div class="grid">${gs.map((g, i) => {
       const artists = [...new Set(g.tracks.map(t => t.artist).filter(Boolean))];
       const cv = (g.tracks.find(t => t.cover_url) || {}).cover_url;
@@ -168,74 +189,265 @@ function renderTab() {
     const gs = groupBy(S.tracks, t => isA ? t.artist : t.genre).filter(g => matches(q, g.key || 'Tidak diketahui'))
       .sort((a, b) => cmp(a.key || '\uffff', b.key || '\uffff'));
     S.groups = gs;
-    if (!gs.length) return `<div class="empty">${isA ? 'Belum ada artis.' : 'Belum ada genre.'}</div>`;
+    if (!gs.length) return `<div class="empty">${q ? 'Tidak ada hasil.' : (isA ? 'Belum ada artis.' : 'Belum ada genre.')}</div>`;
     return gs.map((g, i) => {
       const cv = (g.tracks.find(t => t.cover_url) || {}).cover_url;
       return `<div class="row ${isA ? 'round' : ''}" data-act="open" data-kind="${isA ? 'artist' : 'genre'}" data-i="${i}">${coverHtml(cv)}
         <div class="tx"><b>${esc(g.key || 'Tidak diketahui')}</b><span>${g.tracks.length} lagu</span></div></div>`;
     }).join('');
   }
+  return '';
+}
 
-  // playlists
+/* ========================================================
+   RENDER MENU 2: PLAYLIST (Add Playlist & Koleksi)
+   ======================================================== */
+function renderPlaylistsView() {
+  const q = S.q;
+  let h = `
+  <div class="pl-banner">
+    <div>
+      <h3>Koleksi Playlist</h3>
+      <p>Buat daftar putar sesuai selera dan lagu favorit Anda.</p>
+    </div>
+    <button class="pill acc" data-act="newpl">
+      <svg class="ic"><use href="#i-add"/></svg> Buat Playlist
+    </button>
+  </div>`;
+
   const smart = [
     ['fav', 'Favorit', 'heart-on', S.tracks.filter(t => t.favorite).length],
     ['recent', 'Terakhir diputar', 'timer', Math.min(50, S.tracks.filter(t => t.last_played_at).length)],
     ['most', 'Paling sering diputar', 'repeat', Math.min(50, S.tracks.filter(t => t.play_count > 0).length)],
   ].filter(s => matches(q, s[1]));
-  let h = smart.map(s => `<div class="row" data-act="opensmart" data-kind="${s[0]}">
+
+  h += smart.map(s => `<div class="row" data-act="opensmart" data-kind="${s[0]}">
       <div class="cv">${icon(s[2])}</div><div class="tx"><b>${s[1]}</b><span>${s[3]} lagu</span></div></div>`).join('');
-  h += `<div class="tb"><button class="pill" data-act="newpl">${icon('add')}Buat playlist</button></div>`;
-  h += S.playlists.filter(p => matches(q, p.name)).map(p => {
-    const first = S.byId.get(p.track_ids[0]);
-    return `<div class="row" data-act="openpl" data-id="${p.id}">${coverHtml(first && first.cover_url)}
-      <div class="tx"><b>${esc(p.name)}</b><span>${p.track_ids.length} lagu</span></div></div>`;
-  }).join('');
+
+  const customPlaylists = S.playlists.filter(p => matches(q, p.name));
+  if (customPlaylists.length) {
+    h += `<div class="tb" style="margin-top:14px;"><span style="font-weight:700;color:var(--txt);">Daftar Playlist Saya</span><span class="sp"></span><span>${customPlaylists.length} playlist</span></div>`;
+    h += customPlaylists.map(p => {
+      const first = S.byId.get(p.track_ids[0]);
+      return `<div class="row" data-act="openpl" data-id="${p.id}">${coverHtml(first && first.cover_url)}
+        <div class="tx"><b>${esc(p.name)}</b><span>${p.track_ids.length} lagu</span></div>
+        <button class="ib" data-act="plmenu-row" data-id="${p.id}" aria-label="Opsi playlist">${icon('more')}</button>
+      </div>`;
+    }).join('');
+  } else if (!smart.length) {
+    h += `<div class="empty">${q ? 'Tidak ada playlist yang cocok.' : 'Belum ada playlist.'}</div>`;
+  }
+
   return h;
 }
 
+/* ========================================================
+   RENDER MENU 3: SETTING AKUN
+   ======================================================== */
+function renderAccountView() {
+  const m = S.me || {};
+  const isPrem = !!m.premium;
+  const isAdmin = !!m.is_admin;
+  const initial = (m.name || 'U').charAt(0).toUpperCase();
+  const limit = m.limit || 5;
+  const used = m.used || 0;
+  const pct = isPrem ? 100 : Math.min(100, Math.round((used / limit) * 100));
+  const remaining = isPrem ? 'Tanpa batas' : `${m.remaining ?? Math.max(0, limit - used)} lagu lagi`;
+
+  let h = `
+  <div class="ac-wrap">
+    <div class="ac-card">
+      <div class="ac-header">
+        <div class="ac-avatar">${esc(initial)}</div>
+        <div class="ac-title">
+          <b>${esc(m.name || 'Member')}</b>
+          <span>${esc(m.member_code || '-')}</span>
+        </div>
+      </div>
+
+      <div class="ac-id-badge">
+        <span style="font-size:12px;color:var(--mut);">ID Member:</span>
+        <b id="ac-mcode">${esc(m.member_code || '-')}</b>
+        <button class="ib" data-act="copy-ac-id" title="Salin ID Member" style="width:30px;height:30px;"><svg class="ic" style="width:16px;height:16px;"><use href="#i-copy"/></svg></button>
+      </div>
+
+      <div class="ac-quota-box">
+        <div class="ac-quota-info">
+          <span>Paket: <b style="color:${isPrem ? '#b9a8ff' : '#2ecc71'}">${isAdmin ? 'Admin (Full Akses)' : (isPrem ? 'Premium' : 'Free Member')}</b></span>
+          <span>${isPrem && m.premium_until ? `s/d ${m.premium_until}` : `Sisa: ${remaining}`}</span>
+        </div>
+        <div class="ac-quota-bar"><i style="width:${pct}%;background:${isPrem ? 'var(--acc)' : (pct >= 100 ? 'var(--bad)' : 'var(--acc)')}"></i></div>
+        <div class="ac-quota-info">
+          <span>${isPrem ? 'Bebas putar sepuasnya' : `Terpakai ${used} dari ${limit} lagu hari ini`}</span>
+          <span>${isPrem ? 'Aktif' : (used >= limit ? 'Batas Habis' : 'Tersedia')}</span>
+        </div>
+      </div>
+    </div>`;
+
+  if (!isPrem) {
+    h += `
+    <div class="ac-card">
+      <h3 class="ac-section-title">Langganan Musik Premium</h3>
+      <p style="color:var(--mut);font-size:13px;margin:0 0 12px;line-height:1.5;">
+        Dapatkan akses putar lagu sepuasnya tanpa batasan kuota harian. Lakukan transfer dan kirimkan ID member Anda ke pengelola.
+      </p>
+      <div style="background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:13px;margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span class="mut">Tarif Langganan:</span>
+          <b>${esc(m.price || 'Rp 25.000 / bulan')}</b>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <span class="mut">Info Transfer:</span>
+          <b>${esc(m.payment_info || 'Hubungi Admin')}</b>
+        </div>
+        <div style="display:flex;justify-content:space-between;">
+          <span class="mut">ID Member Anda:</span>
+          <b style="color:var(--acc);letter-spacing:0.04em;">${esc(m.member_code || '-')}</b>
+        </div>
+      </div>
+      <button class="pill acc" data-act="copy-ac-id" style="width:100%;justify-content:center;padding:11px;">
+        <svg class="ic"><use href="#i-copy"/></svg> Salin ID Member Anda
+      </button>
+    </div>`;
+  }
+
+  if (IS_ADMIN) {
+    h += `
+    <div class="ac-card">
+      <h3 class="ac-section-title">Manajer Musik & Member (Admin)</h3>
+      <p style="color:var(--mut);font-size:13px;margin:0 0 12px;">
+        Buka panel manajer untuk mengaktifkan status premium member berdasarkan ID member, serta kelola pengguna.
+      </p>
+      <div class="ac-btn-row">
+        <a class="pill acc" href="/admin">
+          <svg class="ic"><use href="#i-shield"/></svg> Buka Manajer Member
+        </a>
+      </div>
+    </div>`;
+  }
+
+  h += `
+    <div class="ac-card">
+      <h3 class="ac-section-title">Pengaturan Aplikasi</h3>
+      <div class="ac-btn-row">
+        <button class="pill" data-act="reload-lib">
+          <svg class="ic"><use href="#i-speed"/></svg> Muat Ulang Pustaka
+        </button>
+        <button class="pill" data-act="logout" style="color:var(--bad);">
+          <svg class="ic"><use href="#i-close"/></svg> Keluar (Logout)
+        </button>
+      </div>
+    </div>
+  </div>`;
+
+  return h;
+}
+
+/* ========================================================
+   RENDER DETAIL (Album, Artist, Genre, Playlist)
+   ======================================================== */
 function renderDetail() {
   const d = S.detail, list = detailTracks(d);
   S.ctx = list.map(t => t.id);
   let h = `<div class="tb">`;
-  if (list.length) h += `<button class="pill acc" data-act="playall">${icon('play')}Putar</button>
-    <button class="pill" data-act="shuffleall">${icon('shuffle')}Acak</button>`;
+  if (list.length) {
+    h += `<button class="pill acc" data-act="playall">${icon('play')}Putar</button>
+      <button class="pill" data-act="shuffleall">${icon('shuffle')}Acak</button>`;
+  }
   h += `<span class="sp"></span><span>${list.length} lagu</span>`;
-  if (d.kind === 'playlist') h += `<button class="ib" data-act="plmenu" aria-label="Opsi playlist">${icon('more')}</button>`;
+  if (d.kind === 'playlist') {
+    h += `<button class="ib" data-act="plmenu" aria-label="Opsi playlist">${icon('more')}</button>`;
+  }
   h += `</div>`;
-  if (!list.length) return h + `<div class="empty">${d.kind === 'playlist' ? 'Playlist kosong. Tambahkan lagu lewat menu ⋮ pada lagu.' : 'Belum ada lagu.'}</div>`;
+  if (!list.length) {
+    return h + `<div class="empty">${d.kind === 'playlist' ? 'Playlist kosong. Tambahkan lagu lewat menu ⋮ pada lagu.' : 'Belum ada lagu.'}</div>`;
+  }
   return h + list.map(trackRow).join('');
 }
 
+/* ========================================================
+   RENDER ROOT
+   ======================================================== */
 function render() {
   const d = S.detail;
+  const nav = S.nav;
+
+  // Tombol Kembali
   $('#btn-back').hidden = !d;
+
+  // Search button & search bar
+  const searchBtn = $('#btn-search');
+  if (searchBtn) searchBtn.hidden = (nav === 'account' && !d);
+  if (nav === 'account' && !d) $('#sb').hidden = true;
+
+  // Title di Topbar
   const h1 = $('#title');
-  h1.textContent = d ? d.title : 'PlayerMP3'; h1.classList.toggle('sub', !!d);
-  $('#tabs').hidden = !!d;
-  $$('#tabs .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
-  $('#content').innerHTML = d ? renderDetail() : renderTab();
+  if (d) {
+    h1.textContent = d.title;
+    h1.classList.add('sub');
+  } else {
+    h1.classList.remove('sub');
+    if (nav === 'music') h1.textContent = 'Putar Musik';
+    else if (nav === 'playlists') h1.textContent = 'Playlist';
+    else if (nav === 'account') h1.textContent = 'Setting Akun';
+  }
+
+  // Sub-tabs Musik (hanya muncul saat di menu Musik dan bukan sedang di halaman detail)
+  const musicTabs = $('#music-tabs');
+  if (musicTabs) {
+    musicTabs.hidden = (nav !== 'music' || !!d);
+    $$('#music-tabs .tab').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  }
+
+  // Sinkronisasi navigasi aktif (Sidebar Desktop & Bottom Nav Mobile)
+  $$('.sb-link[data-nav]').forEach(el => el.classList.toggle('on', el.dataset.nav === nav && !d));
+  $$('.bnav-btn[data-nav]').forEach(el => el.classList.toggle('on', el.dataset.nav === nav && !d));
+
+  // Render isi konten
+  if (d) {
+    $('#content').innerHTML = renderDetail();
+  } else {
+    if (nav === 'music') $('#content').innerHTML = renderMusicView();
+    else if (nav === 'playlists') $('#content').innerHTML = renderPlaylistsView();
+    else if (nav === 'account') $('#content').innerHTML = renderAccountView();
+  }
+
   bindDrop();
+  markNow();
 }
+
 function markNow() {
   const id = cur() && cur().id;
   $$('#content .row[data-act=play]').forEach(r => r.classList.toggle('on', +r.dataset.id === id));
 }
 
-/* ---------- pemutaran ---------- */
+/* ========================================================
+   PEMUTARAN AUDIO & KONTROL
+   ======================================================== */
 async function playAt(i, startPos = 0) {
   const id = S.queue[i], t = S.byId.get(id);
   if (!t) return false;
   const r = await api(`/tracks/${id}/play`, 'POST');
-  if (r.status === 402) { au.pause(); S.me = {...S.me, ...r.data}; renderMe(); paywall(r.data); return false; }
+  if (r.status === 402) {
+    au.pause();
+    S.me = {...S.me, ...r.data};
+    renderMe();
+    paywall(r.data);
+    return false;
+  }
   if (!r.ok) { toast('Gagal memutar lagu'); return false; }
-  S.me = r.data; renderMe();
+  S.me = r.data;
+  renderMe();
   S.qi = i;
   au.src = t.stream_url;
   au.playbackRate = S.speed;
   if (startPos > 1) au.addEventListener('loadedmetadata', () => { au.currentTime = startPos; }, {once: true});
   try { await au.play(); } catch (e) {}
-  t.play_count = (t.play_count || 0) + 1; t.last_played_at = new Date().toISOString();
-  nowUI(t); saveState(); markNow();
+  t.play_count = (t.play_count || 0) + 1;
+  t.last_played_at = new Date().toISOString();
+  nowUI(t);
+  saveState();
+  markNow();
   return true;
 }
 
@@ -337,7 +549,7 @@ function renderQueue() {
   const on = el.querySelector('.qrow.on'); if (on) on.scrollIntoView({block: 'center'});
 }
 
-/* Sleep timer & kecepatan */
+/* Sleep timer */
 function setSleep(minutes, eot) {
   if (S.sleep && S.sleep.t) clearTimeout(S.sleep.t);
   S.sleep = null;
@@ -352,7 +564,7 @@ function sleepUI() {
 }
 setInterval(sleepUI, 30000);
 
-/* UI lagu yang diputar */
+/* UI Lagu yang diputar */
 function nowUI(t) {
   $('#mini').hidden = false;
   $('#mttl').textContent = $('#nttl').textContent = t.title;
@@ -384,7 +596,7 @@ async function toggleFav(t) {
   else toast(t.favorite ? 'Ditambahkan ke Favorit' : 'Dihapus dari Favorit');
 }
 
-/* Playlist */
+/* Playlist Management */
 function upsertPl(p) {
   const i = S.playlists.findIndex(x => x.id === p.id);
   if (i >= 0) S.playlists[i] = p; else S.playlists.push(p);
@@ -395,7 +607,7 @@ async function createPlaylist(thenAdd) {
   const r = await api('/playlists', 'POST', {name});
   if (!r.ok) return toast('Gagal membuat playlist');
   upsertPl(r.data);
-  if (thenAdd) { await addToPlaylist(r.data.id, thenAdd); } else render();
+  if (thenAdd) { await addToPlaylist(r.data.id, thenAdd); } else { render(); toast(`Playlist "${r.data.name}" dibuat`); }
 }
 async function addToPlaylist(plId, trackId) {
   const r = await api(`/playlists/${plId}/tracks`, 'POST', {track_id: trackId});
@@ -409,7 +621,7 @@ function pickPlaylist(trackId) {
   sheet('Tambah ke playlist', items);
 }
 
-/* Menu lagu */
+/* Menu lagu & opsi */
 function trackMenu(t) {
   const items = [
     {label: 'Putar berikutnya', fn: () => enqueue(t.id, true)},
@@ -417,15 +629,18 @@ function trackMenu(t) {
     {label: 'Tambah ke playlist', fn: () => pickPlaylist(t.id)},
     {label: t.favorite ? 'Hapus dari Favorit' : 'Tambah ke Favorit', fn: () => toggleFav(t)},
   ];
-  if (S.detail && S.detail.kind === 'playlist') items.push({label: 'Hapus dari playlist ini', fn: async () => {
-    const r = await api(`/playlists/${S.detail.key}/tracks/${t.id}`, 'DELETE');
-    if (r.ok) { upsertPl(r.data); render(); }
-  }});
+  if (S.detail && S.detail.kind === 'playlist') {
+    items.push({label: 'Hapus dari playlist ini', fn: async () => {
+      const r = await api(`/playlists/${S.detail.key}/tracks/${t.id}`, 'DELETE');
+      if (r.ok) { upsertPl(r.data); render(); }
+    }});
+  }
   if (t.album) items.push({label: 'Buka album', fn: () => { S.detail = {kind: 'album', key: t.album, title: t.album}; closeNp(); render(); }});
   if (t.artist) items.push({label: 'Buka artis', fn: () => { S.detail = {kind: 'artist', key: t.artist, title: t.artist}; closeNp(); render(); }});
   if (IS_ADMIN) items.push({label: 'Hapus dari pustaka', danger: true, fn: () => deleteTrack(t)});
   sheet(t.title, items);
 }
+
 async function deleteTrack(t) {
   if (!confirm(`Hapus "${t.title}" dari pustaka? File akan dihapus permanen.`)) return;
   const r = await api(`/tracks/${t.id}`, 'DELETE');
@@ -439,7 +654,7 @@ async function deleteTrack(t) {
   render(); saveState(); toast('Lagu dihapus');
 }
 
-/* Paywall */
+/* Paywall popup */
 function paywall(d) {
   $('#pwmsg').textContent = d.message || 'Kuota harian habis. Upgrade ke premium untuk lanjut memutar.';
   $('#pwid').textContent = d.member_code || (S.me && S.me.member_code) || '';
@@ -447,7 +662,7 @@ function paywall(d) {
   $('#paywall').classList.add('open');
 }
 
-/* Now Playing / antrean */
+/* Now Playing / Antrean modal */
 function openNp() { if (S.qi >= 0) { $('#np').classList.add('open'); history.pushState({np: 1}, ''); } }
 function closeNp() { $('#np').classList.remove('open'); }
 window.addEventListener('popstate', () => {
@@ -456,7 +671,7 @@ window.addEventListener('popstate', () => {
   else if (S.detail) { S.detail = null; render(); }
 });
 
-/* ---------- penyimpanan status ---------- */
+/* Local Storage State */
 function saveState() {
   try {
     localStorage.setItem('pm_state', JSON.stringify({
@@ -483,7 +698,7 @@ function restoreState() {
 setInterval(() => { if (!au.paused) saveState(); }, 5000);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveState(); });
 
-/* ---------- event audio ---------- */
+/* Event Audio */
 let lastPos = 0;
 au.addEventListener('timeupdate', () => {
   const d = au.duration, c = au.currentTime;
@@ -522,35 +737,98 @@ document.addEventListener('keydown', e => {
   if (e.code === 'ArrowLeft' && e.shiftKey) prev();
 });
 
-/* ---------- aksi klik ---------- */
+/* ========================================================
+   DISPATCHER AKSI KLIK (Navigasi, Sub-tab, Menu)
+   ======================================================== */
 const A = {
-  tab: el => { S.tab = el.dataset.tab; S.detail = null; render(); window.scrollTo(0, 0); },
-  back: () => { if (history.state && history.state.d) history.back(); else { S.detail = null; render(); } },
-  search: () => { const sb = $('#sb'); sb.hidden = !sb.hidden; if (!sb.hidden) $('#q').focus(); else { S.q = ''; $('#q').value = ''; render(); } },
-  quota: () => { const m = S.me; if (!m) return;
-    sheet(`ID member: ${m.member_code}`, [{label: m.premium
-      ? (m.is_admin ? 'Akun admin (tanpa batas)' : `Premium${m.premium_until ? ' sampai ' + m.premium_until : ''}`)
-      : `Free: ${m.used}/${m.limit} lagu hari ini (sisa ${m.remaining})`}]); },
+  nav: el => {
+    S.nav = el.dataset.nav;
+    S.detail = null;
+    render();
+    window.scrollTo(0, 0);
+  },
+  tab: el => {
+    S.tab = el.dataset.tab;
+    S.detail = null;
+    render();
+    window.scrollTo(0, 0);
+  },
+  back: () => {
+    if (history.state && history.state.d) history.back();
+    else { S.detail = null; render(); }
+  },
+  search: () => {
+    const sb = $('#sb');
+    sb.hidden = !sb.hidden;
+    if (!sb.hidden) $('#q').focus();
+    else { S.q = ''; $('#q').value = ''; render(); }
+  },
+  'copy-ac-id': () => {
+    const v = (S.me && S.me.member_code) || '';
+    (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject())
+      .then(() => toast(`ID ${v} berhasil disalin!`), () => toast(`ID: ${v}`));
+  },
+  'reload-lib': () => {
+    reloadTracks();
+    toast('Pustaka musik dimuat ulang');
+  },
+  logout: () => {
+    if (confirm('Yakin ingin keluar?')) $('#logout').submit();
+  },
   topmenu: () => {
     const items = [];
-    if (IS_ADMIN) items.push({label: 'Manajer member', fn: () => { location.href = '/admin'; }});
+    if (IS_ADMIN) items.push({label: 'Manajer Member (Admin)', fn: () => { location.href = '/admin'; }});
     items.push({label: 'Muat ulang pustaka', fn: () => { reloadTracks(); toast('Pustaka dimuat ulang'); }});
+    items.push({label: 'Setting akun', fn: () => { S.nav = 'account'; S.detail = null; render(); }});
     items.push({label: 'Keluar', danger: true, fn: () => $('#logout').submit()});
     sheet(S.me ? `${S.me.name} · ${S.me.member_code}` : 'Menu', items);
   },
-  open: el => { const g = S.groups[+el.dataset.i]; if (!g) return;
-    S.detail = {kind: el.dataset.kind, key: g.key, title: g.key || (el.dataset.kind === 'album' ? 'Tanpa album' : 'Tidak diketahui')}; render(); window.scrollTo(0, 0); history.pushState({d: 1}, ''); },
-  opensmart: el => { const t = {fav: 'Favorit', recent: 'Terakhir diputar', most: 'Paling sering diputar'}[el.dataset.kind];
-    S.detail = {kind: el.dataset.kind, key: null, title: t}; render(); window.scrollTo(0, 0); history.pushState({d: 1}, ''); },
-  openpl: el => { const p = S.playlists.find(x => x.id === +el.dataset.id); if (!p) return;
-    S.detail = {kind: 'playlist', key: p.id, title: p.name}; render(); window.scrollTo(0, 0); history.pushState({d: 1}, ''); },
-  plmenu: () => { const p = S.playlists.find(x => x.id === S.detail.key); if (!p) return;
+  open: el => {
+    const g = S.groups[+el.dataset.i]; if (!g) return;
+    S.detail = {kind: el.dataset.kind, key: g.key, title: g.key || (el.dataset.kind === 'album' ? 'Tanpa album' : 'Tidak diketahui')};
+    render(); window.scrollTo(0, 0); history.pushState({d: 1}, '');
+  },
+  opensmart: el => {
+    const t = {fav: 'Favorit', recent: 'Terakhir diputar', most: 'Paling sering diputar'}[el.dataset.kind];
+    S.detail = {kind: el.dataset.kind, key: null, title: t};
+    render(); window.scrollTo(0, 0); history.pushState({d: 1}, '');
+  },
+  openpl: el => {
+    const p = S.playlists.find(x => x.id === +el.dataset.id); if (!p) return;
+    S.detail = {kind: 'playlist', key: p.id, title: p.name};
+    render(); window.scrollTo(0, 0); history.pushState({d: 1}, '');
+  },
+  'plmenu-row': el => {
+    const p = S.playlists.find(x => x.id === +el.dataset.id); if (!p) return;
     sheet(p.name, [
-      {label: 'Ganti nama', fn: async () => { const n = (prompt('Nama baru:', p.name) || '').trim(); if (!n) return;
-        const r = await api(`/playlists/${p.id}`, 'PATCH', {name: n}); if (r.ok) { upsertPl(r.data); S.detail.title = r.data.name; render(); } }},
-      {label: 'Hapus playlist', danger: true, fn: async () => { if (!confirm(`Hapus playlist "${p.name}"?`)) return;
-        const r = await api(`/playlists/${p.id}`, 'DELETE'); if (r.ok) { S.playlists = S.playlists.filter(x => x.id !== p.id); S.detail = null; render(); } }},
-    ]); },
+      {label: 'Buka playlist', fn: () => { S.detail = {kind: 'playlist', key: p.id, title: p.name}; render(); }},
+      {label: 'Ganti nama', fn: async () => {
+        const n = (prompt('Nama baru:', p.name) || '').trim(); if (!n) return;
+        const r = await api(`/playlists/${p.id}`, 'PATCH', {name: n});
+        if (r.ok) { upsertPl(r.data); render(); }
+      }},
+      {label: 'Hapus playlist', danger: true, fn: async () => {
+        if (!confirm(`Hapus playlist "${p.name}"?`)) return;
+        const r = await api(`/playlists/${p.id}`, 'DELETE');
+        if (r.ok) { S.playlists = S.playlists.filter(x => x.id !== p.id); render(); }
+      }},
+    ]);
+  },
+  plmenu: () => {
+    const p = S.playlists.find(x => x.id === S.detail.key); if (!p) return;
+    sheet(p.name, [
+      {label: 'Ganti nama', fn: async () => {
+        const n = (prompt('Nama baru:', p.name) || '').trim(); if (!n) return;
+        const r = await api(`/playlists/${p.id}`, 'PATCH', {name: n});
+        if (r.ok) { upsertPl(r.data); S.detail.title = r.data.name; render(); }
+      }},
+      {label: 'Hapus playlist', danger: true, fn: async () => {
+        if (!confirm(`Hapus playlist "${p.name}"?`)) return;
+        const r = await api(`/playlists/${p.id}`, 'DELETE');
+        if (r.ok) { S.playlists = S.playlists.filter(x => x.id !== p.id); S.detail = null; render(); }
+      }},
+    ]);
+  },
   newpl: () => createPlaylist(null),
   sort: () => sheet('Urutkan lagu', [['title', 'Judul'], ['artist', 'Artis'], ['album', 'Album'], ['recent', 'Terbaru ditambahkan']]
     .map(([k, l]) => ({label: l, on: S.sort === k, fn: () => { S.sort = k; render(); }}))),
@@ -578,10 +856,14 @@ const A = {
   qup: el => moveQ(+el.dataset.i, +el.dataset.i - 1),
   qdown: el => moveQ(+el.dataset.i, +el.dataset.i + 1),
   qremove: el => removeQ(+el.dataset.i),
-  copyid: () => { const v = $('#pwid').textContent;
-    (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(() => toast('ID disalin'), () => toast(v)); },
+  copyid: () => {
+    const v = $('#pwid').textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject())
+      .then(() => toast('ID disalin'), () => toast(v));
+  },
   pwclose: () => $('#paywall').classList.remove('open'),
 };
+
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || !A[el.dataset.act]) return;
@@ -591,7 +873,9 @@ document.addEventListener('click', e => {
 $('#q').addEventListener('input', e => { S.q = e.target.value.trim().toLowerCase(); render(); });
 $('#paywall').addEventListener('click', e => { if (e.target.id === 'paywall') A.pwclose(); });
 
-/* ---------- upload (admin): drag & drop, dipecah per batch ---------- */
+/* ========================================================
+   UPLOAD AUDIO (ADMIN): DRAG & DROP & MULTI-BATCH
+   ======================================================== */
 const MAX_FILES = 15, MAX_BYTES = 100 * 1024 * 1024;
 function batches(files) {
   const out = []; let c = [], size = 0;
@@ -648,10 +932,9 @@ function bindDrop() {
   ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
   drop.addEventListener('drop', e => upload(e.dataTransfer.files));
 }
-// Cegah browser membuka file bila terlepas di luar kotak drop.
 ['dragover', 'drop'].forEach(ev => window.addEventListener(ev, e => { if (!e.target.closest || !e.target.closest('#drop')) e.preventDefault(); }));
 
-/* ---------- mulai ---------- */
+/* ---------- Mulai Aplikasi ---------- */
 syncModes();
 loadAll();
 })();

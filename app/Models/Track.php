@@ -8,7 +8,7 @@ class Track extends Model
 {
     protected $fillable = [
         'title', 'artist', 'album', 'duration', 'path',
-        'mime', 'cover_path', 'size', 'hash', 'genre', 'track_no',
+        'mime', 'cover_path', 'size', 'hash', 'genre', 'track_no', 'lyrics',
     ];
 
     protected $appends = ['stream_url', 'cover_url'];

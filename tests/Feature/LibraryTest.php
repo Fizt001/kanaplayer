@@ -33,6 +33,36 @@ class LibraryTest extends TestCase
         Storage::disk('local')->assertExists(Track::first()->path);
     }
 
+    public function test_admin_can_update_track_metadata_and_member_cannot(): void
+    {
+        $admin = User::factory()->create();
+        $admin->forceFill(['is_admin' => true])->save();
+        $member = User::factory()->create();
+
+        $t = Track::create(['title' => 'Lagu A', 'path' => 'music/a.mp3']);
+
+        $this->actingAs($member)->patchJson("/tracks/{$t->id}", ['title' => 'Hacked'])->assertForbidden();
+
+        $this->actingAs($admin)->patchJson("/tracks/{$t->id}", [
+            'title' => 'Judul Baru',
+            'artist' => 'Artis Baru',
+            'album' => 'Album Baru',
+            'genre' => 'Pop',
+            'track_no' => 3,
+            'lyrics' => "Baris satu\nBaris dua",
+        ])->assertOk()->assertJson([
+            'title' => 'Judul Baru',
+            'artist' => 'Artis Baru',
+            'album' => 'Album Baru',
+            'genre' => 'Pop',
+            'track_no' => 3,
+            'lyrics' => "Baris satu\nBaris dua",
+        ]);
+
+        $this->assertSame('Judul Baru', $t->fresh()->title);
+        $this->assertSame("Baris satu\nBaris dua", $t->fresh()->lyrics);
+    }
+
     public function test_pages_link_the_pwa_manifest_and_register_service_worker(): void
     {
         $this->get('/login')

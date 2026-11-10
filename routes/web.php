@@ -35,6 +35,7 @@ Route::middleware('auth')->group(function () {
     // Hanya admin: kelola pustaka dan member.
     Route::middleware('admin')->group(function () {
         Route::post('/tracks', [TrackController::class, 'store']);
+        Route::patch('/tracks/{track}', [TrackController::class, 'update']);
         Route::delete('/tracks/{track}', [TrackController::class, 'destroy']);
 
         Route::get('/admin', [AdminController::class, 'index'])->name('admin');

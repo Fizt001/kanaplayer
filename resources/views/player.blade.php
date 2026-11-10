@@ -26,31 +26,94 @@
   <symbol id="i-add" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></symbol>
   <symbol id="i-note" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></symbol>
+  {{-- Ikon Navigasi Utama --}}
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></symbol>
+  <symbol id="i-playlist" viewBox="0 0 24 24"><path d="M3 10h11v2H3v-2zm0-4h11v2H3V6zm0 8h7v2H3v-2zm13-1v8l6-4-6-4z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></symbol>
 </svg>
 
-<div class="pm">
-  <div id="app">
-    <div id="top">
+<div class="pm-app">
+  {{-- Sidebar Navigasi (Mode Desktop) --}}
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="logo-icon"><svg class="ic"><use href="#i-music"/></svg></div>
+      <div class="logo-text">
+        <b>PlayerMP3</b>
+        <span>Web Audio Player</span>
+      </div>
+    </div>
+
+    <nav class="sb-nav">
+      <div class="sb-section-title">Menu Utama</div>
+      <button class="sb-link on" data-act="nav" data-nav="music">
+        <svg class="ic"><use href="#i-music"/></svg>
+        <span>Putar Musik</span>
+      </button>
+      <button class="sb-link" data-act="nav" data-nav="playlists">
+        <svg class="ic"><use href="#i-playlist"/></svg>
+        <span>Playlist</span>
+      </button>
+      <button class="sb-link" data-act="nav" data-nav="account">
+        <svg class="ic"><use href="#i-user"/></svg>
+        <span>Setting Akun</span>
+      </button>
+
+      <div class="sb-section-title" style="margin-top:20px;">Aksi Cepat</div>
+      <button class="sb-link ghost" data-act="newpl">
+        <svg class="ic"><use href="#i-add"/></svg>
+        <span>+ Buat Playlist</span>
+      </button>
+      @if(auth()->user()->is_admin)
+      <a class="sb-link ghost" href="/admin">
+        <svg class="ic"><use href="#i-shield"/></svg>
+        <span>Manajer Member</span>
+      </a>
+      @endif
+    </nav>
+
+    <div class="sb-user">
+      <div class="sb-user-card" data-act="nav" data-nav="account">
+        <div class="u-avatar">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</div>
+        <div class="u-info">
+          <b>{{ auth()->user()->name }}</b>
+          <span class="mut">{{ auth()->user()->member_code }}</span>
+        </div>
+        <span class="chip {{ auth()->user()->isPremium() ? 'prem' : '' }}" id="sb-chip">
+          {{ auth()->user()->is_admin ? 'Admin' : (auth()->user()->isPremium() ? 'Premium' : 'Free') }}
+        </span>
+      </div>
+    </div>
+  </aside>
+
+  {{-- Area Konten Utama --}}
+  <div class="main-pane">
+    <header id="top">
       <div class="bar">
         <button class="ib" data-act="back" id="btn-back" hidden aria-label="Kembali"><svg class="ic"><use href="#i-back"/></svg></button>
-        <h1 id="title">PlayerMP3</h1>
-        <button class="ib" data-act="search" aria-label="Cari"><svg class="ic"><use href="#i-search"/></svg></button>
-        <button class="chip" id="chip" data-act="quota">...</button>
+        <h1 id="title">Putar Musik</h1>
+        <button class="ib" data-act="search" id="btn-search" aria-label="Cari"><svg class="ic"><use href="#i-search"/></svg></button>
+        <button class="chip" id="chip" data-act="nav" data-nav="account">...</button>
         <button class="ib" data-act="topmenu" aria-label="Menu"><svg class="ic"><use href="#i-more"/></svg></button>
       </div>
-      <div id="sb" hidden><input id="q" type="search" placeholder="Cari lagu, album, artis..." autocomplete="off"></div>
-      <nav id="tabs">
-        <button class="tab" data-act="tab" data-tab="playlists">Playlist</button>
+
+      <div id="sb" hidden><input id="q" type="search" placeholder="Cari lagu, album, artis, genre..." autocomplete="off"></div>
+
+      {{-- Sub-tab Musik (Hanya tampil saat di menu Putar Musik dan tidak sedang di halaman detail) --}}
+      <nav id="music-tabs">
         <button class="tab on" data-act="tab" data-tab="tracks">Lagu</button>
         <button class="tab" data-act="tab" data-tab="albums">Album</button>
         <button class="tab" data-act="tab" data-tab="artists">Artis</button>
         <button class="tab" data-act="tab" data-tab="genres">Genre</button>
       </nav>
-    </div>
+    </header>
+
     <main id="content"></main>
   </div>
 
-  {{-- Mini player --}}
+  {{-- Mini Player --}}
   <div id="mini" hidden>
     <div class="prog"><i id="mprog"></i></div>
     <div class="in" data-act="open-np">
@@ -61,7 +124,23 @@
     </div>
   </div>
 
-  {{-- Now Playing --}}
+  {{-- Bottom Navigation Bar (Mode Mobile - Layaknya Tampilan Android) --}}
+  <nav class="bottom-nav">
+    <button class="bnav-btn on" data-act="nav" data-nav="music">
+      <div class="bnav-icon"><svg class="ic"><use href="#i-music"/></svg></div>
+      <span class="bnav-label">Musik</span>
+    </button>
+    <button class="bnav-btn" data-act="nav" data-nav="playlists">
+      <div class="bnav-icon"><svg class="ic"><use href="#i-playlist"/></svg></div>
+      <span class="bnav-label">Playlist</span>
+    </button>
+    <button class="bnav-btn" data-act="nav" data-nav="account">
+      <div class="bnav-icon"><svg class="ic"><use href="#i-user"/></svg></div>
+      <span class="bnav-label">Akun</span>
+    </button>
+  </nav>
+
+  {{-- Now Playing Sheet --}}
   <section id="np" aria-label="Sedang diputar">
     <div class="wrapnp">
       <div class="top">

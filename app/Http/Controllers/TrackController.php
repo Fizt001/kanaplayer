@@ -80,6 +80,7 @@ class TrackController extends Controller
                 'duration' => $meta['duration'],
                 'genre' => $meta['genre'],
                 'track_no' => $meta['track_no'],
+                'lyrics' => $meta['lyrics'],
                 'path' => $path,
                 'mime' => $file->getMimeType(),
                 'cover_path' => $coverPath,
@@ -171,6 +172,29 @@ class TrackController extends Controller
         ]);
     }
 
+    public function update(Request $request, Track $track): JsonResponse
+    {
+        $data = $request->validate([
+            'title' => 'required|string|max:200',
+            'artist' => 'nullable|string|max:200',
+            'album' => 'nullable|string|max:200',
+            'genre' => 'nullable|string|max:100',
+            'track_no' => 'nullable|integer|min:0|max:65535',
+            'lyrics' => 'nullable|string|max:65535',
+        ]);
+
+        foreach (['artist', 'album', 'genre', 'lyrics'] as $k) {
+            if (array_key_exists($k, $data)) {
+                $data[$k] = $data[$k] !== null && trim($data[$k]) !== '' ? trim($data[$k]) : null;
+            }
+        }
+        $data['track_no'] = ! empty($data['track_no']) ? (int) $data['track_no'] : null;
+
+        $track->update($data);
+
+        return response()->json($track->fresh());
+    }
+
     public function destroy(Track $track): JsonResponse
     {
         Storage::disk('local')->delete(array_filter([$track->path, $track->cover_path]));
@@ -193,12 +217,14 @@ class TrackController extends Controller
             'limit' => $premium ? null : $limit,
             'used' => $user->playsToday(),
             'remaining' => $premium ? null : max(0, $limit - $user->playsToday()),
+            'payment_info' => config('player.payment_info'),
+            'price' => config('player.premium_price'),
         ];
     }
 
     private function readMeta(string $file): array
     {
-        $out = ['title' => null, 'artist' => null, 'album' => null, 'genre' => null, 'track_no' => null, 'duration' => 0, 'cover' => null, 'cover_ext' => 'jpg'];
+        $out = ['title' => null, 'artist' => null, 'album' => null, 'genre' => null, 'track_no' => null, 'lyrics' => null, 'duration' => 0, 'cover' => null, 'cover_ext' => 'jpg'];
 
         try {
             $info = (new \getID3)->analyze($file);
@@ -217,6 +243,15 @@ class TrackController extends Controller
                 if ($out[$k]) {
                     $out[$k] = html_entity_decode($out[$k], ENT_QUOTES | ENT_HTML5, 'UTF-8');
                 }
+            }
+
+            $out['lyrics'] = $info['comments']['unsynched_lyrics'][0]
+                ?? $info['id3v2']['comments']['unsynchronised_lyric'][0]
+                ?? $info['comments']['lyrics'][0]
+                ?? null;
+
+            if ($out['lyrics']) {
+                $out['lyrics'] = trim(html_entity_decode((string) $out['lyrics'], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
             }
 
             if (! empty($info['comments']['picture'][0]['data'])) {
