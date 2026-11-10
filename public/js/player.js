@@ -472,11 +472,11 @@ function renderPlaylistsView() {
   <div class="pl-banner">
     <div class="pl-banner-text">
       <h3>Koleksi Playlist</h3>
-      <p>Buat daftar putar sesuai selera dan lagu favorit Anda.</p>
+      <p>Daftar putar lagu favorit & pilihan Anda</p>
     </div>
     <button class="btn-newpl" data-act="newpl">
       <svg class="ic"><use href="#i-add"/></svg>
-      <span>+ Buat Playlist</span>
+      <span>Buat Playlist</span>
     </button>
   </div>`;
 
@@ -486,33 +486,47 @@ function renderPlaylistsView() {
     ['most', 'Paling sering diputar', 'repeat', Math.min(50, S.tracks.filter(t => t.play_count > 0).length), 'smart-most'],
   ].filter(s => matches(q, s[1]));
 
-  h += smart.map(s => `
-    <div class="pl-card-row" data-act="opensmart" data-kind="${s[0]}">
-      <div class="cv ${s[4]}">${icon(s[2])}</div>
-      <div class="tx">
-        <b>${s[1]}</b>
-        <span>${s[3]} lagu</span>
-      </div>
-    </div>`).join('');
+  if (smart.length) {
+    h += `<div class="pl-group-card">`;
+    h += smart.map((s, idx) => `
+      ${idx > 0 ? '<div class="pl-group-divider"></div>' : ''}
+      <div class="pl-group-item" data-act="opensmart" data-kind="${s[0]}">
+        <div class="cv ${s[4]}">${icon(s[2])}</div>
+        <div class="tx">
+          <b>${s[1]}</b>
+          <span>${s[3]} lagu</span>
+        </div>
+        <div class="pl-arrow">${icon('chevron')}</div>
+      </div>`).join('');
+    h += `</div>`;
+  }
 
   const customPlaylists = S.playlists.filter(p => matches(q, p.name));
   if (customPlaylists.length) {
-    h += `<div class="tb" style="margin-top:18px;margin-bottom:6px;"><span style="font-weight:700;color:var(--txt);font-size:15px;">Daftar Playlist Saya</span><span class="sp"></span><span style="font-size:13px;">${customPlaylists.length} playlist</span></div>`;
-    h += customPlaylists.map(p => {
+    h += `
+    <div class="pl-section-head">
+      <span class="pl-section-title">Playlist Saya</span>
+      <span class="pl-section-count">${customPlaylists.length} playlist</span>
+    </div>
+    <div class="pl-group-card">`;
+    h += customPlaylists.map((p, idx) => {
       const first = S.byId.get(p.track_ids[0]);
       const cvHtml = first && first.cover_url
         ? coverHtml(first.cover_url)
         : `<div class="cv smart-custom">${icon('playlist')}</div>`;
       return `
-        <div class="pl-card-row" data-act="openpl" data-id="${p.id}">
+        ${idx > 0 ? '<div class="pl-group-divider"></div>' : ''}
+        <div class="pl-group-item" data-act="openpl" data-id="${p.id}">
           ${cvHtml}
           <div class="tx">
             <b>${esc(p.name)}</b>
             <span>${p.track_ids.length} lagu</span>
           </div>
           <button class="ib" data-act="plmenu-row" data-id="${p.id}" aria-label="Opsi playlist">${icon('more')}</button>
+          <div class="pl-arrow">${icon('chevron')}</div>
         </div>`;
     }).join('');
+    h += `</div>`;
   } else if (!smart.length) {
     h += `<div class="empty">${q ? 'Tidak ada playlist yang cocok.' : 'Belum ada playlist.'}</div>`;
   }

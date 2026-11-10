@@ -760,13 +760,28 @@ body { background: #0b0c0f; margin: 0; }
   margin-bottom: 22px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
+/* ========================================================
+   PLAYLIST VIEW (Samsung One UI Style)
+   ======================================================== */
+.pl-banner {
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.16), rgba(22, 24, 29, 0.96));
+  border: 1px solid rgba(124, 92, 255, 0.28);
+  border-radius: 20px;
+  padding: 20px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
 .pl-banner-text { flex: 1; min-width: 0; }
 .pl-banner-text h3 { margin: 0 0 4px; font-size: 18px; font-weight: 700; color: var(--txt); }
 .pl-banner-text p { margin: 0; color: var(--mut); font-size: 13px; }
 
 .btn-newpl {
   height: 42px !important;
-  padding: 0 22px !important;
+  padding: 0 20px !important;
   font-size: 14px !important;
   font-weight: 700 !important;
   border-radius: 99px !important;
@@ -792,7 +807,107 @@ body { background: #0b0c0f; margin: 0; }
   transform: translateY(0);
 }
 
-/* Playlist Card Row */
+/* Playlist Unified Group Card (Samsung One UI) */
+.pl-group-card {
+  background: linear-gradient(145deg, rgba(22, 24, 30, 0.95), rgba(15, 17, 22, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  margin-bottom: 16px;
+}
+
+.pl-group-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  cursor: pointer;
+  transition: background .12s ease;
+}
+.pl-group-item:hover, .pl-group-item:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pl-group-item .cv {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+}
+.pl-group-item .cv .ic {
+  width: 24px;
+  height: 24px;
+  fill: #fff;
+}
+
+.pl-group-item .tx {
+  flex: 1;
+  min-width: 0;
+}
+.pl-group-item .tx b {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--txt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pl-group-item .tx span {
+  display: block;
+  font-size: 12px;
+  color: var(--mut);
+  margin-top: 3px;
+}
+
+.pl-arrow {
+  color: var(--mut);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity .15s ease, transform .15s ease;
+}
+.pl-group-item:hover .pl-arrow {
+  opacity: 1;
+  transform: translateX(2px);
+}
+.pl-arrow .ic {
+  width: 18px;
+  height: 18px;
+}
+
+.pl-group-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 0 18px;
+}
+
+.pl-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 4px 8px;
+}
+.pl-section-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--mut);
+  text-transform: uppercase;
+}
+.pl-section-count {
+  font-size: 12px;
+  color: var(--mut);
+}
+
+/* Backward compatibility for standalone pl-card-row */
 .pl-card-row {
   display: flex;
   align-items: center;
