@@ -727,7 +727,21 @@ function renderDetail() {
   }
   h += `</div>`;
   if (!list.length) {
-    return h + `<div class="empty">${d.kind === 'playlist' ? 'Playlist kosong. Tambahkan lagu lewat menu ⋮ pada lagu.' : 'Belum ada lagu.'}</div>`;
+    if (d.kind === 'playlist') {
+      return h + `
+      <div class="empty" style="padding:48px 16px;text-align:center;">
+        <div style="font-size:36px;margin-bottom:12px;">🎵</div>
+        <b style="display:block;font-size:16px;color:var(--txt);margin-bottom:6px;">Playlist "${esc(d.title)}" Masih Kosong</b>
+        <p style="color:var(--mut);font-size:13px;max-width:360px;margin:0 auto 18px;line-height:1.5;">
+          Anda bisa memasukkan lagu langsung lewat tombol di bawah, atau lewat tanda titik tiga <b>(⋮)</b> pada lagu di menu Putar Musik.
+        </p>
+        <button class="tb-btn primary" data-act="add-songs-to-pl" data-id="${d.key}" style="margin:0 auto;">
+          <svg class="ic"><use href="#i-add"/></svg>
+          <span>+ Tambah Lagu Sekarang</span>
+        </button>
+      </div>`;
+    }
+    return h + `<div class="empty">Belum ada lagu.</div>`;
   }
   return h + list.map(trackRow).join('');
 }
@@ -1055,6 +1069,21 @@ function pickPlaylist(trackId) {
   sheet('Tambah ke playlist', items);
 }
 
+function openAddSongsToPlaylist(plId) {
+  const p = S.playlists.find(x => x.id === plId);
+  if (!p) return;
+  const currentIds = new Set(p.track_ids || []);
+  const available = S.tracks.filter(t => !currentIds.has(t.id));
+  if (!available.length) {
+    return toast('Semua lagu di pustaka sudah ada di playlist ini');
+  }
+  const items = available.map(t => ({
+    label: `${t.title} · ${t.artist || 'Artis tidak diketahui'}`,
+    fn: () => addToPlaylist(p.id, t.id),
+  }));
+  sheet(`Pilih Lagu untuk "${p.name}"`, items);
+}
+
 /* Menu lagu & opsi */
 function trackMenu(t) {
   const items = [
@@ -1322,6 +1351,7 @@ const A = {
   'plmenu-row': el => {
     const p = S.playlists.find(x => x.id === +el.dataset.id); if (!p) return;
     sheet(p.name, [
+      {label: '+ Tambah lagu ke playlist ini', fn: () => openAddSongsToPlaylist(p.id)},
       {label: 'Buka playlist', fn: () => { S.detail = {kind: 'playlist', key: p.id, title: p.name}; render(); }},
       {label: 'Ganti nama', fn: async () => {
         const n = await promptDialog({
@@ -1352,6 +1382,7 @@ const A = {
   plmenu: () => {
     const p = S.playlists.find(x => x.id === S.detail.key); if (!p) return;
     sheet(p.name, [
+      {label: '+ Tambah lagu ke playlist ini', fn: () => openAddSongsToPlaylist(p.id)},
       {label: 'Ganti nama', fn: async () => {
         const n = await promptDialog({
           title: 'Ubah Nama Playlist',
@@ -1378,6 +1409,7 @@ const A = {
       }},
     ]);
   },
+  'add-songs-to-pl': el => openAddSongsToPlaylist(+el.dataset.id),
   'dlg-cancel': () => closePromptDialog(null),
   'dlg-conf-cancel': () => closeConfirmDialog(false),
   'dlg-edit-cancel': () => closeEditTrack(),
