@@ -1,11 +1,11 @@
 {
-  "name": "PlayerMP3",
-  "short_name": "PlayerMP3",
-  "description": "Pemutar musik pribadi",
+  "name": "KanaPlayer - Offline Media Player",
+  "short_name": "KanaPlayer",
+  "description": "Pemutar musik & media offline modern untuk HP dan Desktop",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0f1115",
+  "background_color": "#0b0e14",
   "theme_color": "#7c5cff",
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

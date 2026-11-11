@@ -1,5 +1,5 @@
 @extends('layouts.base')
-@section('title', 'PlayerMP3')
+@section('title', 'KanaPlayer')
 @push('head')
 <link rel="stylesheet" href="/css/player.css?v={{ filemtime(public_path('css/player.css')) }}">
 @endpush
