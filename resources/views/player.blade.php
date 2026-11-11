@@ -41,6 +41,8 @@
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></symbol>
   <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></symbol>
   <symbol id="i-logout" viewBox="0 0 24 24"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></symbol>
 </svg>
 
 <div class="pm-app">
@@ -50,22 +52,23 @@
       <div class="logo-icon"><svg class="ic"><use href="#i-music"/></svg></div>
       <div class="logo-text">
         <b>PlayerMP3</b>
-        <span>Web Audio Player</span>
+        <span>Offline Media Player</span>
       </div>
     </div>
 
     <nav class="sb-nav">
-      <div class="sb-section-title">Sumber Musik</div>
+      <div class="sb-section-title">Media Player</div>
       <button class="sb-link on" data-act="nav" data-nav="music">
-        <svg class="ic"><use href="#i-cloud"/></svg>
-        <span>Musik Cloud (Server)</span>
+        <svg class="ic"><use href="#i-music"/></svg>
+        <span>Musik Offline</span>
       </button>
-      <button class="sb-link" data-act="nav" data-nav="device">
-        <svg class="ic"><use href="#i-device"/></svg>
-        <span>Musik Perangkat</span>
+      <button class="sb-link" data-act="nav" data-nav="video">
+        <svg class="ic"><use href="#i-video"/></svg>
+        <span>Player Video</span>
+        <span class="sb-lock-pill"><svg class="ic-mini"><use href="#i-lock"/></svg><span>Kunci</span></span>
       </button>
 
-      <div class="sb-section-title" style="margin-top:16px;">Koleksi & Akun</div>
+      <div class="sb-section-title" style="margin-top:16px;">Koleksi &amp; Akun</div>
       <button class="sb-link" data-act="nav" data-nav="playlists">
         <svg class="ic"><use href="#i-playlist"/></svg>
         <span>Playlist</span>
@@ -76,8 +79,12 @@
       </button>
 
       <div class="sb-section-title" style="margin-top:16px;">Aksi Cepat</div>
-      <button class="sb-link ghost" data-act="newpl">
+      <button class="sb-link ghost" data-act="pick-local-files">
         <svg class="ic"><use href="#i-add"/></svg>
+        <span>Pilih Lagu Offline</span>
+      </button>
+      <button class="sb-link ghost" data-act="newpl">
+        <svg class="ic"><use href="#i-playlist"/></svg>
         <span>Buat Playlist</span>
       </button>
       @if(auth()->user()->is_admin)
@@ -120,7 +127,7 @@
         <button class="tab on" data-act="tab" data-tab="tracks">Lagu</button>
         <button class="tab" data-act="tab" data-tab="albums">Album</button>
         <button class="tab" data-act="tab" data-tab="artists">Artis</button>
-        <button class="tab" data-act="tab" data-tab="genres">Genre</button>
+        <button class="tab" data-act="tab" data-tab="folders">Folder</button>
       </nav>
     </header>
 
@@ -141,12 +148,15 @@
   {{-- Bottom Navigation Bar (Mode Mobile - Layaknya Tampilan Android) --}}
   <nav class="bottom-nav">
     <button class="bnav-btn on" data-act="nav" data-nav="music">
-      <div class="bnav-icon"><svg class="ic"><use href="#i-cloud"/></svg></div>
-      <span class="bnav-label">Cloud</span>
+      <div class="bnav-icon"><svg class="ic"><use href="#i-music"/></svg></div>
+      <span class="bnav-label">Musik</span>
     </button>
-    <button class="bnav-btn" data-act="nav" data-nav="device">
-      <div class="bnav-icon"><svg class="ic"><use href="#i-device"/></svg></div>
-      <span class="bnav-label">Perangkat</span>
+    <button class="bnav-btn" data-act="nav" data-nav="video">
+      <div class="bnav-icon">
+        <svg class="ic"><use href="#i-video"/></svg>
+        <span class="bnav-lock-badge"><svg class="ic-mini"><use href="#i-lock"/></svg></span>
+      </div>
+      <span class="bnav-label">Video</span>
     </button>
     <button class="bnav-btn" data-act="nav" data-nav="playlists">
       <div class="bnav-icon"><svg class="ic"><use href="#i-playlist"/></svg></div>

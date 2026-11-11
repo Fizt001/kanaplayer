@@ -301,23 +301,35 @@ async function addLocalFiles(fileList) {
   render();
 }
 
-/* ---------- data loading ---------- */
+/* ---------- data loading & local storage ---------- */
+const PL_STORAGE_KEY = 'playermp3_offline_playlists';
+function loadLocalPlaylists() {
+  try {
+    const raw = localStorage.getItem(PL_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+function saveLocalPlaylists(lists) {
+  try {
+    localStorage.setItem(PL_STORAGE_KEY, JSON.stringify(lists));
+  } catch (e) {}
+}
+
 async function loadAll() {
   await loadLocalTracks();
-  const [t, p, m] = await Promise.all([api('/tracks'), api('/playlists'), api('/me')]);
-  S.tracks = Array.isArray(t.data) ? t.data : [];
-  S.byId = new Map(S.tracks.map(x => [x.id, x]));
-  S.playlists = Array.isArray(p.data) ? p.data : [];
-  S.me = m.data;
+  S.byId = new Map(S.localTracks.map(x => [x.id, x]));
+  S.playlists = loadLocalPlaylists();
+
+  try {
+    const m = await api('/me');
+    S.me = m.data;
+  } catch (e) {}
+
   renderMe();
   render();
   restoreState();
-}
-async function reloadTracks() {
-  const t = await api('/tracks');
-  S.tracks = Array.isArray(t.data) ? t.data : S.tracks;
-  S.byId = new Map(S.tracks.map(x => [x.id, x]));
-  render();
 }
 
 function renderMe() {
@@ -353,16 +365,16 @@ function sortTracks(list) {
 }
 
 function detailTracks(d) {
-  const T = S.tracks;
+  const T = S.localTracks;
   switch (d.kind) {
-    case 'album':  return T.filter(t => (t.album || '') === d.key).sort(byTrackNo);
-    case 'artist': return T.filter(t => (t.artist || '') === d.key).sort((a, b) => cmp(a.album, b.album) || byTrackNo(a, b));
-    case 'genre':  return T.filter(t => (t.genre || '') === d.key).sort((a, b) => cmp(a.title, b.title));
-    case 'fav':    return T.filter(t => t.favorite).sort((a, b) => cmp(a.title, b.title));
-    case 'recent': return T.filter(t => t.last_played_at).sort((a, b) => b.last_played_at.localeCompare(a.last_played_at)).slice(0, 50);
-    case 'most':   return T.filter(t => t.play_count > 0).sort((a, b) => b.play_count - a.play_count).slice(0, 50);
+    case 'album':   return T.filter(t => (t.album || 'Musik Perangkat') === d.key).sort(byTrackNo);
+    case 'artist':  return T.filter(t => (t.artist || 'Artis tidak diketahui') === d.key).sort((a, b) => cmp(a.album, b.album) || byTrackNo(a, b));
+    case 'folders': return T.filter(t => (t.folder || 'Penyimpanan Utama') === d.key).sort(byTrackNo);
+    case 'fav':     return T.filter(t => t.favorite).sort((a, b) => cmp(a.title, b.title));
+    case 'recent':  return T.filter(t => t.last_played_at).sort((a, b) => b.last_played_at.localeCompare(a.last_played_at)).slice(0, 50);
+    case 'most':    return T.filter(t => (t.play_count || 0) > 0).sort((a, b) => (b.play_count || 0) - (a.play_count || 0)).slice(0, 50);
     case 'playlist': {
-      const p = S.playlists.find(x => x.id === d.key);
+      const p = S.playlists.find(x => String(x.id) === String(d.key));
       return p ? p.track_ids.map(id => S.byId.get(id)).filter(Boolean) : [];
     }
   }
@@ -371,85 +383,27 @@ function detailTracks(d) {
 
 function trackRow(t) {
   const on = cur() && String(cur().id) === String(t.id);
-  const isLoc = t.is_local || String(t.id).startsWith('dev_');
   return `<div class="row ${on ? 'on' : ''}" data-act="play" data-id="${t.id}">
     ${coverHtml(t.cover_url)}
     <div class="tx">
-      <b>${esc(t.title)}${isLoc ? '<span class="tag-local">Perangkat</span>' : ''}</b>
+      <b>${esc(t.title)}</b>
       <span>${esc(t.artist || 'Artis tidak diketahui')}${t.album ? ' · ' + esc(t.album) : ''}</span>
     </div>
     <span class="du">${fmt(t.duration)}</span>
-    <button class="ib" data-act="${isLoc ? 'local-menu' : 'menu'}" data-id="${t.id}" aria-label="Menu">${icon('more')}</button>
+    <button class="ib" data-act="menu" data-id="${t.id}" aria-label="Menu">${icon('more')}</button>
   </div>`;
 }
 
 /* ========================================================
-   RENDER MENU 1: PUTAR MUSIK (Sub-tab Lagu, Album, Artis, Genre)
+   RENDER MENU 1: MUSIK OFFLINE (Lagu, Album, Artis, Folder)
    ======================================================== */
-function renderMusicView() {
+function renderMusicOfflineView() {
   const q = S.q, tab = S.tab;
-  S.groups = [];
-
-  if (tab === 'tracks') {
-    const list = sortTracks(S.tracks.filter(t => matches(q, t.title, t.artist, t.album, t.genre)));
-    S.ctx = list.map(t => t.id);
-    const labels = {title: 'Judul', artist: 'Artis', album: 'Album', recent: 'Terbaru'};
-    let h = '';
-    if (IS_ADMIN && !q) {
-      h += `<div id="drop">Seret &amp; lepas file audio ke sini, atau klik untuk memilih
-        <input id="file" type="file" accept="audio/*,.flac,.m4a,.opus" multiple hidden><div id="up"></div></div>`;
-    }
-    if (!list.length) return h + `<div class="empty">${q ? 'Tidak ada lagu yang cocok.' : 'Pustaka musik masih kosong. Tambahkan lagu dengan drag & drop.'}</div>`;
-    h += `<div class="tb">
-      <button class="tb-btn primary" data-act="playall">${icon('play')}<span>Putar</span></button>
-      <button class="tb-btn secondary ${S.shuffle ? 'on' : ''}" data-act="shuffleall">${icon('shuffle')}<span>Acak</span></button>
-      <span class="sp"></span>
-      <button class="lnk" data-act="sort">${list.length} lagu · ${labels[S.sort]} ▾</button>
-    </div>`;
-    return h + list.map(trackRow).join('');
-  }
-
-  if (tab === 'albums') {
-    const gs = groupBy(S.tracks, t => t.album).filter(g => matches(q, g.key || 'Tanpa album', g.tracks.map(t => t.artist).join(' ')))
-      .sort((a, b) => cmp(a.key || '\uffff', b.key || '\uffff'));
-    S.groups = gs;
-    if (!gs.length) return `<div class="empty">${q ? 'Tidak ada album yang cocok.' : 'Belum ada album.'}</div>`;
-    return `<div class="grid">${gs.map((g, i) => {
-      const artists = [...new Set(g.tracks.map(t => t.artist).filter(Boolean))];
-      const cv = (g.tracks.find(t => t.cover_url) || {}).cover_url;
-      return `<div class="card" data-act="open" data-kind="album" data-i="${i}">${coverHtml(cv)}
-        <b>${esc(g.key || 'Tanpa album')}</b><span>${artists.length > 1 ? 'Berbagai artis' : esc(artists[0] || '')}</span></div>`;
-    }).join('')}</div>`;
-  }
-
-  if (tab === 'artists' || tab === 'genres') {
-    const isA = tab === 'artists';
-    const gs = groupBy(S.tracks, t => isA ? t.artist : t.genre).filter(g => matches(q, g.key || 'Tidak diketahui'))
-      .sort((a, b) => cmp(a.key || '\uffff', b.key || '\uffff'));
-    S.groups = gs;
-    if (!gs.length) return `<div class="empty">${q ? 'Tidak ada hasil.' : (isA ? 'Belum ada artis.' : 'Belum ada genre.')}</div>`;
-    return gs.map((g, i) => {
-      const cv = (g.tracks.find(t => t.cover_url) || {}).cover_url;
-      return `<div class="row ${isA ? 'round' : ''}" data-act="open" data-kind="${isA ? 'artist' : 'genre'}" data-i="${i}">${coverHtml(cv)}
-        <div class="tx"><b>${esc(g.key || 'Tidak diketahui')}</b><span>${g.tracks.length} lagu</span></div></div>`;
-    }).join('');
-  }
-  return '';
-}
-
-/* ========================================================
-   RENDER MENU: MUSIK PERANGKAT (Lokal IndexedDB)
-   ======================================================== */
-function renderDeviceView() {
-  const q = S.q;
-  let list = S.localTracks.filter(t => matches(q, t.title, t.artist, t.album));
-  S.ctx = list.map(t => t.id);
-
   const m = S.me || {};
   const isFree = !m.premium && !m.is_admin;
   const bannerSub = isFree
     ? `Putar lagu dari penyimpanan HP/Laptop. <b>Member Free dibatasi maks. 5 lagu</b> &bull; Upgrade Premium untuk akses tanpa batas.`
-    : `Putar lagu dari penyimpanan HP atau Laptop Anda tanpa upload ke server. Akses Premium: Bebas tanpa batas kuota.`;
+    : `Putar lagu dari penyimpanan HP atau Laptop secara offline tanpa kuota internet.`;
 
   let h = `
   <div class="device-banner">
@@ -472,32 +426,142 @@ function renderDeviceView() {
   if (!S.localTracks.length) {
     return h + `
     <div class="empty" style="padding:48px 16px;text-align:center;">
-      <div style="font-size:36px;margin-bottom:12px;">📁</div>
-      <b style="display:block;font-size:16px;color:var(--txt);margin-bottom:6px;">Belum Ada Musik Perangkat</b>
+      <div style="font-size:38px;margin-bottom:12px;">🎵</div>
+      <b style="display:block;font-size:16px;color:var(--txt);margin-bottom:6px;">Belum Ada Musik Offline</b>
       <p style="color:var(--mut);font-size:13px;max-width:380px;margin:0 auto 16px;line-height:1.5;">
-        Klik tombol di atas untuk memilih lagu atau folder musik dari HP/Laptop Anda. Lagu akan tersimpan di browser ini dan siap diputar kapan saja!
+        Klik tombol di atas untuk memilih lagu atau folder musik dari HP/Laptop Anda. Lagu akan tersimpan di browser ini dan siap diputar kapan saja tanpa koneksi internet!
       </p>
     </div>`;
   }
 
-  if (!list.length) {
-    return h + `<div class="empty">Tidak ada lagu perangkat yang cocok dengan pencarian.</div>`;
+  if (tab === 'tracks') {
+    let list = sortTracks(S.localTracks.filter(t => matches(q, t.title, t.artist, t.album)));
+    S.ctx = list.map(t => t.id);
+
+    if (!list.length) {
+      return h + `<div class="empty">Tidak ada lagu yang cocok dengan pencarian "${esc(q)}".</div>`;
+    }
+
+    const labels = {title: 'Judul', artist: 'Artis', album: 'Album', recent: 'Terbaru'};
+    h += `
+    <div class="tb">
+      <button class="tb-btn primary" data-act="playall">${icon('play')}<span>Putar</span></button>
+      <button class="tb-btn secondary ${S.shuffle ? 'on' : ''}" data-act="shuffleall">${icon('shuffle')}<span>Acak</span></button>
+      <span class="sp"></span>
+      <button class="lnk" data-act="sort">${isFree ? `${list.length}/5 lagu (Free)` : `${list.length} lagu`} · ${labels[S.sort]} ▾</button>
+      <button class="ib" data-act="clear-local-music" title="Hapus semua lagu perangkat" aria-label="Hapus semua">${icon('close')}</button>
+    </div>`;
+
+    return h + list.map(trackRow).join('');
   }
 
-  h += `
-  <div class="tb">
-    <button class="tb-btn primary" data-act="playall">${icon('play')}<span>Putar</span></button>
-    <button class="tb-btn secondary ${S.shuffle ? 'on' : ''}" data-act="shuffleall">${icon('shuffle')}<span>Acak</span></button>
-    <span class="sp"></span>
-    <span style="font-size:12.5px;color:var(--mut);">${isFree ? `${list.length}/5 lagu (Free)` : `${list.length} lagu`}</span>
-    <button class="ib" data-act="clear-local-music" title="Hapus semua lagu perangkat" aria-label="Hapus semua">${icon('close')}</button>
-  </div>`;
+  if (tab === 'albums') {
+    const gs = groupBy(S.localTracks, t => t.album || 'Musik Perangkat').filter(g => matches(q, g.key, g.tracks.map(t => t.artist).join(' ')))
+      .sort((a, b) => cmp(a.key, b.key));
+    S.groups = gs;
+    if (!gs.length) return h + `<div class="empty">${q ? 'Tidak ada album yang cocok.' : 'Belum ada album.'}</div>`;
+    return h + `<div class="grid">${gs.map((g, i) => {
+      const artists = [...new Set(g.tracks.map(t => t.artist).filter(Boolean))];
+      const cv = (g.tracks.find(t => t.cover_url) || {}).cover_url;
+      return `<div class="card" data-act="open" data-kind="album" data-i="${i}">${coverHtml(cv)}
+        <b>${esc(g.key)}</b><span>${artists.length > 1 ? 'Berbagai artis' : esc(artists[0] || 'Artis tidak diketahui')} · ${g.tracks.length} lagu</span></div>`;
+    }).join('')}</div>`;
+  }
 
-  return h + list.map(trackRow).join('');
+  if (tab === 'artists') {
+    const gs = groupBy(S.localTracks, t => t.artist || 'Artis tidak diketahui').filter(g => matches(q, g.key))
+      .sort((a, b) => cmp(a.key, b.key));
+    S.groups = gs;
+    if (!gs.length) return h + `<div class="empty">${q ? 'Tidak ada artis yang cocok.' : 'Belum ada artis.'}</div>`;
+    return h + gs.map((g, i) => {
+      const cv = (g.tracks.find(t => t.cover_url) || {}).cover_url;
+      return `<div class="row round" data-act="open" data-kind="artist" data-i="${i}">${coverHtml(cv)}
+        <div class="tx"><b>${esc(g.key)}</b><span>${g.tracks.length} lagu</span></div></div>`;
+    }).join('');
+  }
+
+  if (tab === 'folders') {
+    const gs = groupBy(S.localTracks, t => t.folder || 'Penyimpanan Utama').filter(g => matches(q, g.key))
+      .sort((a, b) => cmp(a.key, b.key));
+    S.groups = gs;
+    if (!gs.length) return h + `<div class="empty">${q ? 'Tidak ada folder yang cocok.' : 'Belum ada folder.'}</div>`;
+    return h + gs.map((g, i) => {
+      return `<div class="row" data-act="open" data-kind="folders" data-i="${i}">
+        <div class="cv"><svg class="ic"><use href="#i-folder"/></svg></div>
+        <div class="tx"><b>${esc(g.key)}</b><span>${g.tracks.length} lagu</span></div>
+        <div class="pl-arrow">${icon('chevron')}</div>
+      </div>`;
+    }).join('');
+  }
+
+  return h;
 }
 
 /* ========================================================
-   RENDER MENU 2: PLAYLIST (Add Playlist & Koleksi)
+   RENDER MENU: PLAYER VIDEO (FITUR TERKUNCI)
+   ======================================================== */
+function renderVideoView() {
+  return `
+  <div class="video-locked-wrap">
+    <div class="video-hero-card">
+      <div class="video-lock-badge">
+        <svg class="ic"><use href="#i-lock"/></svg>
+        <span>Fitur Terkunci</span>
+      </div>
+
+      <div class="video-graphic">
+        <div class="video-graphic-circle">
+          <svg class="ic"><use href="#i-video"/></svg>
+        </div>
+      </div>
+
+      <h3>Player Video Offline HD</h3>
+      <p class="video-hero-desc">
+        Putar video favorit Anda dari memori HP atau Laptop (MP4, MKV, WebM) langsung tanpa internet dan tanpa kuota data.
+      </p>
+
+      <div class="video-status-chip">
+        <span class="dot"></span>
+        <span>Tahap Pengembangan · Segera Hadir</span>
+      </div>
+    </div>
+
+    <div class="video-features-group">
+      <div class="video-feat-item">
+        <div class="video-feat-icon">🎬</div>
+        <div class="video-feat-text">
+          <b>Pemutar Video Offline Berkualitas Tinggi</b>
+          <span>Mendukung resolusi hingga 4K UHD dengan decoding hardware yang hemat daya baterai.</span>
+        </div>
+      </div>
+      <div class="video-feat-item">
+        <div class="video-feat-icon">⚡</div>
+        <div class="video-feat-text">
+          <b>Kontrol Gestur Sentuh Cerdas</b>
+          <span>Usap kiri/kanan untuk kecerahan, volume, dan geser cepat posisi video layaknya aplikasi Android bawaan.</span>
+        </div>
+      </div>
+      <div class="video-feat-item">
+        <div class="video-feat-icon">📺</div>
+        <div class="video-feat-text">
+          <b>Picture-in-Picture (PiP) &amp; Latar Belakang</b>
+          <span>Tonton video dalam jendela mengambang mini sambil membuka aplikasi lain.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="video-cta-box">
+      <button class="tb-btn primary" data-act="nav" data-nav="account" style="height:44px;padding:0 24px;font-size:14px;">
+        <svg class="ic"><use href="#i-user"/></svg>
+        <span>Lihat Status Akun Saya</span>
+      </button>
+      <span class="video-cta-note">Fitur ini akan otomatis aktif di akun Anda saat pembaruan dirilis.</span>
+    </div>
+  </div>`;
+}
+
+/* ========================================================
+   RENDER MENU 3: PLAYLIST (Add Playlist & Koleksi Offline)
    ======================================================== */
 function renderPlaylistsView() {
   const q = S.q;
@@ -505,7 +569,7 @@ function renderPlaylistsView() {
   <div class="pl-banner">
     <div class="pl-banner-text">
       <h3>Koleksi Playlist</h3>
-      <p>Daftar putar lagu favorit & pilihan Anda</p>
+      <p>Daftar putar lagu favorit &amp; pilihan Anda</p>
     </div>
     <button class="btn-newpl" data-act="newpl">
       <svg class="ic"><use href="#i-add"/></svg>
@@ -514,9 +578,9 @@ function renderPlaylistsView() {
   </div>`;
 
   const smart = [
-    ['fav', 'Favorit', 'heart-on', S.tracks.filter(t => t.favorite).length, 'smart-fav'],
-    ['recent', 'Terakhir diputar', 'timer', Math.min(50, S.tracks.filter(t => t.last_played_at).length), 'smart-recent'],
-    ['most', 'Paling sering diputar', 'repeat', Math.min(50, S.tracks.filter(t => t.play_count > 0).length), 'smart-most'],
+    ['fav', 'Favorit', 'heart-on', S.localTracks.filter(t => t.favorite).length, 'smart-fav'],
+    ['recent', 'Terakhir diputar', 'timer', Math.min(50, S.localTracks.filter(t => t.last_played_at).length), 'smart-recent'],
+    ['most', 'Paling sering diputar', 'repeat', Math.min(50, S.localTracks.filter(t => (t.play_count || 0) > 0).length), 'smart-most'],
   ].filter(s => matches(q, s[1]));
 
   if (smart.length) {
@@ -575,10 +639,7 @@ function renderAccountView() {
   const isPrem = !!m.premium;
   const isAdmin = !!m.is_admin;
   const initial = (m.name || 'U').charAt(0).toUpperCase();
-  const limit = m.limit || 5;
-  const used = m.used || 0;
-  const pct = isPrem ? 100 : Math.min(100, Math.round((used / limit) * 100));
-  const remaining = isPrem ? 'Tanpa batas' : `${m.remaining ?? Math.max(0, limit - used)} lagu tersisa`;
+  const localCount = S.localTracks.length;
 
   let h = `
   <div class="ac-wrap">
@@ -602,47 +663,18 @@ function renderAccountView() {
 
       <div class="ac-quota-box">
         <div class="ac-quota-header">
-          <span>Status Kuota Harian</span>
-          <b style="color:${isPrem ? '#38bdf8' : (used >= limit ? 'var(--bad)' : '#2ecc71')}">
-            ${isPrem ? 'Bebas Putar (Unlimited)' : remaining}
-          </b>
+          <span>Musik Offline di Perangkat</span>
+          <b style="color:#38bdf8">${localCount} lagu${isPrem || isAdmin ? '' : ` / 5 (Free)`}</b>
         </div>
         <div class="ac-quota-bar">
-          <i style="width:${pct}%;background:${isPrem ? 'linear-gradient(90deg, #7c5cff, #00c6ff)' : (pct >= 100 ? 'var(--bad)' : 'linear-gradient(90deg, #7c5cff, #00c6ff)')}"></i>
+          <i style="width:${isPrem || isAdmin ? 100 : Math.min(100, localCount / 5 * 100)}%;background:linear-gradient(90deg, #7c5cff, #00c6ff)"></i>
         </div>
         <div class="ac-quota-footer">
-          <span>${isPrem ? 'Akses penuh seluruh musik' : `Terpakai ${used} dari ${limit} lagu hari ini`}</span>
-          <span>${isPrem && m.premium_until ? `s/d ${m.premium_until}` : (isPrem ? 'Aktif' : (used >= limit ? 'Batas Habis' : 'Tersedia'))}</span>
+          <span>${isPrem || isAdmin ? 'Tambahkan lagu sebanyak yang Anda mau' : 'Upgrade Premium untuk lagu tak terbatas'}</span>
+          <span>${isPrem || isAdmin ? 'Aktif' : `${Math.max(0, 5 - localCount)} slot tersisa`}</span>
         </div>
       </div>
     </div>`;
-
-  if (!isPrem) {
-    h += `
-    <div class="ac-card ac-prem-banner">
-      <div class="ac-prem-top">
-        <div class="ac-prem-badge">⭐ LANGGANAN PREMIUM</div>
-        <span class="ac-prem-price">${esc(m.price || 'Rp 25.000 / bln')}</span>
-      </div>
-      <h3 class="ac-prem-title">Putar Musik Tanpa Batas</h3>
-      <p class="ac-prem-desc">
-        Bebas putar ribuan lagu di Cloud Server setiap hari tanpa batasan kuota.
-      </p>
-      <div class="ac-prem-info-box">
-        <div class="ac-prem-info-row">
-          <span class="mut">Info Transfer Bank:</span>
-          <b>${esc(m.payment_info || 'Hubungi Admin')}</b>
-        </div>
-        <div class="ac-prem-info-row">
-          <span class="mut">Kirimkan ID Member:</span>
-          <b style="color:var(--acc);letter-spacing:0.04em;">${esc(m.member_code || '-')}</b>
-        </div>
-      </div>
-      <button class="btn-upgrade-copy" data-act="copy-ac-id">
-        <svg class="ic"><use href="#i-copy"/></svg> Salin ID Member Anda
-      </button>
-    </div>`;
-  }
 
   if (IS_ADMIN) {
     h += `
@@ -670,7 +702,7 @@ function renderAccountView() {
         </div>
         <div class="ac-tile-body">
           <b>Muat Ulang Pustaka Musik</b>
-          <span>Sinkronisasi ulang daftar lagu dan cover dari server</span>
+          <span>Muat ulang daftar lagu dari penyimpanan browser</span>
         </div>
         <div class="ac-tile-arrow">
           <svg class="ic"><use href="#i-chevron"/></svg>
@@ -758,8 +790,8 @@ function render() {
 
   // Search button & search bar
   const searchBtn = $('#btn-search');
-  if (searchBtn) searchBtn.hidden = (nav === 'account' && !d);
-  if (nav === 'account' && !d) $('#sb').hidden = true;
+  if (searchBtn) searchBtn.hidden = ((nav === 'account' || nav === 'video') && !d);
+  if ((nav === 'account' || nav === 'video') && !d) $('#sb').hidden = true;
 
   // Sembunyikan chip status dan tombol menu titik tiga di header saat di Setting Akun agar topbar mobile bersih
   const topChip = $('#chip');
@@ -774,13 +806,13 @@ function render() {
     h1.classList.add('sub');
   } else {
     h1.classList.remove('sub');
-    if (nav === 'music') h1.textContent = 'Musik Cloud';
-    else if (nav === 'device') h1.textContent = 'Musik Perangkat';
+    if (nav === 'music') h1.textContent = 'Musik';
+    else if (nav === 'video') h1.textContent = 'Player Video';
     else if (nav === 'playlists') h1.textContent = 'Playlist';
     else if (nav === 'account') h1.textContent = 'Setting Akun';
   }
 
-  // Sub-tabs Musik (hanya muncul saat di menu Musik Cloud dan bukan sedang di halaman detail)
+  // Sub-tabs Musik (hanya muncul saat di menu Musik dan bukan sedang di halaman detail)
   const musicTabs = $('#music-tabs');
   if (musicTabs) {
     musicTabs.hidden = (nav !== 'music' || !!d);
@@ -795,8 +827,8 @@ function render() {
   if (d) {
     $('#content').innerHTML = renderDetail();
   } else {
-    if (nav === 'music') $('#content').innerHTML = renderMusicView();
-    else if (nav === 'device') $('#content').innerHTML = renderDeviceView();
+    if (nav === 'music') $('#content').innerHTML = renderMusicOfflineView();
+    else if (nav === 'video') $('#content').innerHTML = renderVideoView();
     else if (nav === 'playlists') $('#content').innerHTML = renderPlaylistsView();
     else if (nav === 'account') $('#content').innerHTML = renderAccountView();
   }
@@ -1025,10 +1057,10 @@ function ppUI() {
 }
 
 async function toggleFav(t) {
-  t.favorite = !t.favorite; favUI(cur()); render();
-  const r = await api(`/tracks/${t.id}/favorite`, 'POST');
-  if (!r.ok) { t.favorite = !t.favorite; favUI(cur()); render(); toast('Gagal menyimpan favorit'); }
-  else toast(t.favorite ? 'Ditambahkan ke Favorit' : 'Dihapus dari Favorit');
+  t.favorite = !t.favorite;
+  await saveLocalTrack(t);
+  favUI(cur()); render();
+  toast(t.favorite ? 'Ditambahkan ke Favorit' : 'Dihapus dari Favorit');
 }
 
 /* Playlist Management */
@@ -1047,33 +1079,54 @@ async function createPlaylist(thenAdd) {
     submitText: 'Buat Playlist',
   });
   if (!name) return;
-  const r = await api('/playlists', 'POST', {name});
-  if (!r.ok) return toast('Gagal membuat playlist');
-  upsertPl(r.data);
-  if (thenAdd) {
-    await addToPlaylist(r.data.id, thenAdd);
-  } else {
+  const newPl = {
+    id: 'pl_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    name: name.trim(),
+    track_ids: thenAdd ? [thenAdd] : [],
+    created_at: new Date().toISOString(),
+  };
+  S.playlists.push(newPl);
+  saveLocalPlaylists(S.playlists);
+  render();
+  toast(`Playlist "${newPl.name}" berhasil dibuat!`);
+}
+
+function addToPlaylist(plId, trackId) {
+  const p = S.playlists.find(x => String(x.id) === String(plId));
+  if (!p) return;
+  if (!p.track_ids.includes(trackId)) {
+    p.track_ids.push(trackId);
+    saveLocalPlaylists(S.playlists);
     render();
-    toast(`Playlist "${r.data.name}" berhasil dibuat!`);
+    toast(`Ditambahkan ke "${p.name}"`);
+  } else {
+    toast(`Lagu sudah ada di "${p.name}"`);
   }
 }
-async function addToPlaylist(plId, trackId) {
-  const r = await api(`/playlists/${plId}/tracks`, 'POST', {track_id: trackId});
-  if (!r.ok) return toast('Gagal menambahkan ke playlist');
-  upsertPl(r.data); render();
-  toast(`Ditambahkan ke "${r.data.name}"`);
+
+function removeFromPlaylist(plId, trackId) {
+  const p = S.playlists.find(x => String(x.id) === String(plId));
+  if (!p) return;
+  p.track_ids = p.track_ids.filter(x => String(x) !== String(trackId));
+  saveLocalPlaylists(S.playlists);
+  render();
+  toast('Lagu dihapus dari playlist');
 }
+
 function pickPlaylist(trackId) {
   const items = [{label: '+ Playlist baru', fn: () => createPlaylist(trackId)}];
-  S.playlists.forEach(p => items.push({label: `${p.name} (${p.track_ids.length})`, fn: () => addToPlaylist(p.id, trackId)}));
+  S.playlists.forEach(p => items.push({
+    label: `${p.name} (${p.track_ids.length})`,
+    fn: () => addToPlaylist(p.id, trackId),
+  }));
   sheet('Tambah ke playlist', items);
 }
 
 function openAddSongsToPlaylist(plId) {
-  const p = S.playlists.find(x => x.id === plId);
+  const p = S.playlists.find(x => String(x.id) === String(plId));
   if (!p) return;
   const currentIds = new Set(p.track_ids || []);
-  const available = S.tracks.filter(t => !currentIds.has(t.id));
+  const available = S.localTracks.filter(t => !currentIds.has(t.id));
   if (!available.length) {
     return toast('Semua lagu di pustaka sudah ada di playlist ini');
   }
@@ -1093,34 +1146,33 @@ function trackMenu(t) {
     {label: t.favorite ? 'Hapus dari Favorit' : 'Tambah ke Favorit', fn: () => toggleFav(t)},
   ];
   if (S.detail && S.detail.kind === 'playlist') {
-    items.push({label: 'Hapus dari playlist ini', fn: async () => {
-      const r = await api(`/playlists/${S.detail.key}/tracks/${t.id}`, 'DELETE');
-      if (r.ok) { upsertPl(r.data); render(); }
-    }});
+    items.push({label: 'Hapus dari playlist ini', fn: () => removeFromPlaylist(S.detail.key, t.id)});
   }
-  if (t.album) items.push({label: 'Buka album', fn: () => { S.detail = {kind: 'album', key: t.album, title: t.album}; closeNp(); render(); }});
-  if (t.artist) items.push({label: 'Buka artis', fn: () => { S.detail = {kind: 'artist', key: t.artist, title: t.artist}; closeNp(); render(); }});
-  if (IS_ADMIN && !t.is_local) {
-    items.push({label: 'Edit Info Lagu & Lirik', fn: () => openEditTrack(t)});
-    items.push({label: 'Hapus dari pustaka server', danger: true, fn: () => deleteTrack(t)});
+  if (t.album && t.album !== 'Musik Perangkat' && t.album !== 'Tanpa album') {
+    items.push({label: 'Buka album', fn: () => { S.detail = {kind: 'album', key: t.album, title: t.album}; closeNp(); render(); }});
   }
-  sheet(t.title, items);
-}
-
-function localTrackMenu(t) {
-  const items = [
-    {label: 'Putar berikutnya', fn: () => enqueue(t.id, true)},
-    {label: 'Tambah ke antrean', fn: () => enqueue(t.id, false)},
-    {label: 'Hapus dari perangkat ini', danger: true, fn: async () => {
-      await deleteLocalTrack(t.id);
-      S.localTracks = S.localTracks.filter(x => x.id !== t.id);
-      if (cur() && String(cur().id) === String(t.id)) {
-        au.pause(); au.removeAttribute('src'); S.qi = -1; $('#mini').hidden = true; closeNp();
-      }
-      render();
-      toast('Lagu dihapus dari perangkat');
-    }},
-  ];
+  if (t.artist && t.artist !== 'Perangkat Lokal' && t.artist !== 'Artis tidak diketahui') {
+    items.push({label: 'Buka artis', fn: () => { S.detail = {kind: 'artist', key: t.artist, title: t.artist}; closeNp(); render(); }});
+  }
+  items.push({label: 'Hapus dari perangkat ini', danger: true, fn: async () => {
+    const ok = await confirmDialog({
+      title: 'Hapus Lagu?',
+      desc: `Lagu "${t.title}" akan dihapus dari pemutar offline ini.`,
+      okText: 'Hapus',
+      danger: true,
+    });
+    if (!ok) return;
+    await deleteLocalTrack(t.id);
+    S.localTracks = S.localTracks.filter(x => x.id !== t.id);
+    S.byId.delete(t.id);
+    S.playlists.forEach(p => { p.track_ids = p.track_ids.filter(x => x !== t.id); });
+    saveLocalPlaylists(S.playlists);
+    if (cur() && String(cur().id) === String(t.id)) {
+      au.pause(); au.removeAttribute('src'); S.qi = -1; $('#mini').hidden = true; closeNp();
+    }
+    render();
+    toast('Lagu dihapus dari perangkat');
+  }});
   sheet(t.title, items);
 }
 
@@ -1303,8 +1355,10 @@ const A = {
     (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject())
       .then(() => toast(`ID ${v} berhasil disalin!`), () => toast(`ID: ${v}`));
   },
-  'reload-lib': () => {
-    reloadTracks();
+  'reload-lib': async () => {
+    await loadLocalTracks();
+    S.byId = new Map(S.localTracks.map(x => [x.id, x]));
+    render();
     toast('Pustaka musik dimuat ulang');
   },
   'open-admin-panel': () => { location.href = '/admin'; },
@@ -1320,7 +1374,12 @@ const A = {
   topmenu: () => {
     const items = [];
     if (IS_ADMIN) items.push({label: 'Manajer Member (Admin)', fn: () => { location.href = '/admin'; }});
-    items.push({label: 'Muat ulang pustaka', fn: () => { reloadTracks(); toast('Pustaka dimuat ulang'); }});
+    items.push({label: 'Muat ulang pustaka', fn: async () => {
+      await loadLocalTracks();
+      S.byId = new Map(S.localTracks.map(x => [x.id, x]));
+      render();
+      toast('Pustaka dimuat ulang');
+    }});
     items.push({label: 'Setting akun', fn: () => { S.nav = 'account'; S.detail = null; render(); }});
     items.push({label: 'Keluar', danger: true, fn: async () => {
       const ok = await confirmDialog({
@@ -1344,12 +1403,12 @@ const A = {
     render(); window.scrollTo(0, 0); history.pushState({d: 1}, '');
   },
   openpl: el => {
-    const p = S.playlists.find(x => x.id === +el.dataset.id); if (!p) return;
+    const p = S.playlists.find(x => String(x.id) === String(el.dataset.id)); if (!p) return;
     S.detail = {kind: 'playlist', key: p.id, title: p.name};
     render(); window.scrollTo(0, 0); history.pushState({d: 1}, '');
   },
   'plmenu-row': el => {
-    const p = S.playlists.find(x => x.id === +el.dataset.id); if (!p) return;
+    const p = S.playlists.find(x => String(x.id) === String(el.dataset.id)); if (!p) return;
     sheet(p.name, [
       {label: '+ Tambah lagu ke playlist ini', fn: () => openAddSongsToPlaylist(p.id)},
       {label: 'Buka playlist', fn: () => { S.detail = {kind: 'playlist', key: p.id, title: p.name}; render(); }},
@@ -1363,8 +1422,10 @@ const A = {
           submitText: 'Simpan',
         });
         if (!n) return;
-        const r = await api(`/playlists/${p.id}`, 'PATCH', {name: n});
-        if (r.ok) { upsertPl(r.data); render(); toast('Nama playlist diperbarui'); }
+        p.name = n.trim();
+        saveLocalPlaylists(S.playlists);
+        render();
+        toast('Nama playlist diperbarui');
       }},
       {label: 'Hapus playlist', danger: true, fn: async () => {
         const ok = await confirmDialog({
@@ -1374,13 +1435,15 @@ const A = {
           danger: true,
         });
         if (!ok) return;
-        const r = await api(`/playlists/${p.id}`, 'DELETE');
-        if (r.ok) { S.playlists = S.playlists.filter(x => x.id !== p.id); render(); toast('Playlist dihapus'); }
+        S.playlists = S.playlists.filter(x => x.id !== p.id);
+        saveLocalPlaylists(S.playlists);
+        render();
+        toast('Playlist dihapus');
       }},
     ]);
   },
   plmenu: () => {
-    const p = S.playlists.find(x => x.id === S.detail.key); if (!p) return;
+    const p = S.playlists.find(x => String(x.id) === String(S.detail.key)); if (!p) return;
     sheet(p.name, [
       {label: '+ Tambah lagu ke playlist ini', fn: () => openAddSongsToPlaylist(p.id)},
       {label: 'Ganti nama', fn: async () => {
@@ -1393,8 +1456,11 @@ const A = {
           submitText: 'Simpan',
         });
         if (!n) return;
-        const r = await api(`/playlists/${p.id}`, 'PATCH', {name: n});
-        if (r.ok) { upsertPl(r.data); S.detail.title = r.data.name; render(); toast('Nama playlist diperbarui'); }
+        p.name = n.trim();
+        saveLocalPlaylists(S.playlists);
+        S.detail.title = p.name;
+        render();
+        toast('Nama playlist diperbarui');
       }},
       {label: 'Hapus playlist', danger: true, fn: async () => {
         const ok = await confirmDialog({
@@ -1404,12 +1470,15 @@ const A = {
           danger: true,
         });
         if (!ok) return;
-        const r = await api(`/playlists/${p.id}`, 'DELETE');
-        if (r.ok) { S.playlists = S.playlists.filter(x => x.id !== p.id); S.detail = null; render(); toast('Playlist dihapus'); }
+        S.playlists = S.playlists.filter(x => x.id !== p.id);
+        saveLocalPlaylists(S.playlists);
+        S.detail = null;
+        render();
+        toast('Playlist dihapus');
       }},
     ]);
   },
-  'add-songs-to-pl': el => openAddSongsToPlaylist(+el.dataset.id),
+  'add-songs-to-pl': el => openAddSongsToPlaylist(el.dataset.id),
   'dlg-cancel': () => closePromptDialog(null),
   'dlg-conf-cancel': () => closeConfirmDialog(false),
   'dlg-edit-cancel': () => closeEditTrack(),
@@ -1447,7 +1516,7 @@ const A = {
   },
   'local-menu': el => {
     const t = S.localTracks.find(x => x.id === el.dataset.id);
-    if (t) localTrackMenu(t);
+    if (t) trackMenu(t);
   },
   newpl: () => createPlaylist(null),
   sort: () => sheet('Urutkan lagu', [['title', 'Judul'], ['artist', 'Artis'], ['album', 'Album'], ['recent', 'Terbaru ditambahkan']]
@@ -1461,10 +1530,7 @@ const A = {
     const rawId = el.dataset.id;
     const id = rawId.startsWith('dev_') ? rawId : +rawId;
     const t = S.byId.get(id) || S.localTracks.find(x => x.id === id);
-    if (t) {
-      if (t.is_local) localTrackMenu(t);
-      else trackMenu(t);
-    }
+    if (t) trackMenu(t);
   },
   playall: () => {
     if (!S.ctx || !S.ctx.length) return toast('Tidak ada lagu untuk diputar');
@@ -1583,7 +1649,8 @@ async function upload(files) {
   if (skipped) msg += `, ${skipped} dilewati (duplikat/format tidak didukung)`;
   if (failed) msg += `, ${failed} gagal (${lastErr})`;
   S.uploading = false;
-  await reloadTracks();
+  await loadLocalTracks();
+  S.byId = new Map(S.localTracks.map(x => [x.id, x]));
   say(msg); toast(msg);
 }
 function bindDrop() {

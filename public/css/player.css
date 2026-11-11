@@ -1531,3 +1531,198 @@ html, body {
     left: calc(50% + 125px); /* Geser tengah relative ke main pane */
   }
 }
+
+/* ========================================================
+   LOCK BADGES (SIDEBAR & BOTTOM NAV)
+   ======================================================== */
+.ic-mini {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+  flex: none;
+  pointer-events: none;
+}
+.bnav-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.bnav-lock-badge {
+  position: absolute;
+  top: -3px;
+  right: -7px;
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #0b0c0f;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  border: 1.5px solid #0b0c0f;
+}
+.sb-lock-pill {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  line-height: 1;
+}
+
+/* ========================================================
+   VIDEO PLAYER VIEW (FITUR TERKUNCI / SAMSUNG ONE UI STYLE)
+   ======================================================== */
+.video-locked-wrap {
+  padding: 6px 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.video-hero-card {
+  background: linear-gradient(145deg, rgba(30, 26, 40, 0.95), rgba(16, 17, 24, 0.98));
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 20px;
+  padding: 24px 20px 22px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  position: relative;
+  overflow: hidden;
+}
+
+.video-lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  font-size: 11.5px;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+.video-lock-badge .ic {
+  width: 13px;
+  height: 13px;
+}
+
+.video-graphic {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.video-graphic-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(124, 92, 255, 0.25));
+  border: 1.5px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 24px rgba(245, 158, 11, 0.2);
+}
+.video-graphic-circle .ic {
+  width: 36px;
+  height: 36px;
+}
+
+.video-hero-card h3 {
+  margin: 0 0 6px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #fff;
+}
+.video-hero-desc {
+  margin: 0 auto 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--mut);
+  max-width: 440px;
+}
+
+.video-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 11px;
+  color: var(--mut);
+  font-weight: 600;
+}
+.video-status-chip .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 8px #f59e0b;
+}
+
+.video-features-group {
+  background: linear-gradient(145deg, rgba(22, 24, 30, 0.95), rgba(15, 17, 22, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.video-feat-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 16px;
+}
+.video-feat-item:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.video-feat-icon {
+  font-size: 20px;
+  line-height: 1;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+.video-feat-text {
+  flex: 1;
+  min-width: 0;
+}
+.video-feat-text b {
+  display: block;
+  font-size: 13.5px;
+  color: var(--txt);
+  margin-bottom: 2px;
+}
+.video-feat-text span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--mut);
+  line-height: 1.4;
+}
+
+.video-cta-box {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+}
+.video-cta-note {
+  font-size: 11px;
+  color: var(--mut);
+}
