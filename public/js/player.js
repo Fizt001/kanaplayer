@@ -769,7 +769,7 @@ function renderDetail() {
         </p>
         <button class="tb-btn primary" data-act="add-songs-to-pl" data-id="${d.key}" style="margin:0 auto;">
           <svg class="ic"><use href="#i-add"/></svg>
-          <span>+ Tambah Lagu Sekarang</span>
+          <span>Tambah Lagu Sekarang</span>
         </button>
       </div>`;
     }
