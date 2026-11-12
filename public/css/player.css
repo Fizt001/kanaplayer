@@ -932,6 +932,124 @@ html, body {
   background: rgba(255, 255, 255, 0.08) !important;
   transform: translateY(-1px);
 }
+
+/* ── YouTube Button ──────────────────────────────────── */
+.btn-device-yt {
+  height: 40px !important;
+  padding: 0 16px !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  border-radius: 99px !important;
+  background: linear-gradient(135deg, #ff0000, #cc0000) !important;
+  color: #fff !important;
+  border: none !important;
+  cursor: pointer;
+  transition: all .15s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 7px;
+  white-space: nowrap;
+  box-sizing: border-box !important;
+  line-height: 1 !important;
+  box-shadow: 0 4px 14px rgba(255, 0, 0, 0.35);
+}
+.btn-device-yt .ic {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+  fill: currentColor;
+}
+.btn-device-yt span {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+.btn-device-yt:hover {
+  filter: brightness(1.15);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(255, 0, 0, 0.5) !important;
+}
+
+/* ── YouTube Progress Overlay ───────────────────────── */
+.yt-progress-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  align-items: center;
+  justify-content: center;
+}
+.yt-progress-overlay.open {
+  display: flex;
+}
+.yt-progress-card {
+  background: #1a202c;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 32px 28px;
+  max-width: 320px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.yt-progress-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #ff0000, #cc0000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+}
+.ytp-msg {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--txt);
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+.ytp-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.ytp-bar-inner {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #ff0000, #ff6b6b);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+.ytp-hint {
+  font-size: 11px;
+  color: var(--mut);
+  margin: 10px 0 0;
+}
+
+/* ── Account Storage Row ────────────────────────────── */
+.ac-storage-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--mut);
+}
+.ac-storage-row b {
+  color: var(--txt);
+  font-size: 12px;
+  font-weight: 600;
+}
 .tag-local {
   display: inline-block;
   padding: 2px 7px;
@@ -1504,6 +1622,10 @@ html, body {
   .btn-device-add, .btn-device-folder {
     flex: 1;
     justify-content: center;
+  }
+  .btn-device-yt {
+    flex: 1;
+    justify-content: center !important;
   }
   .btn-newpl {
     width: 100%;

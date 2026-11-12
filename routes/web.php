@@ -4,6 +4,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PlaylistController;
 use App\Http\Controllers\TrackController;
+use App\Http\Controllers\YoutubeController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -31,6 +32,10 @@ Route::middleware('auth')->group(function () {
     Route::delete('/playlists/{playlist}', [PlaylistController::class, 'destroy']);
     Route::post('/playlists/{playlist}/tracks', [PlaylistController::class, 'addTrack']);
     Route::delete('/playlists/{playlist}/tracks/{track}', [PlaylistController::class, 'removeTrack']);
+
+    // YouTube-to-Audio extraction
+    Route::post('/youtube/info', [YoutubeController::class, 'info']);
+    Route::get('/youtube/stream/{token}', [YoutubeController::class, 'stream']);
 
     // Hanya admin: kelola pustaka dan member.
     Route::middleware('admin')->group(function () {

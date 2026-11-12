@@ -223,6 +223,120 @@ async function clearAllLocalTracks() {
   } catch (e) {}
 }
 
+/* --------------------------------------------------------
+   YOUTUBE-TO-AUDIO: Storage estimate & extraction
+   -------------------------------------------------------- */
+async function estimateStorage() {
+  try {
+    if (!navigator.storage || !navigator.storage.estimate) return null;
+    const est = await navigator.storage.estimate();
+    return { used: est.usage || 0, quota: est.quota || 0 };
+  } catch (e) { return null; }
+}
+
+async function updateStorageDisplay() {
+  const el = document.getElementById('ac-storage-val');
+  if (!el) return;
+  const s = await estimateStorage();
+  if (!s || !s.quota) { el.textContent = 'Tidak tersedia'; return; }
+  const usedMB = (s.used / 1024 / 1024).toFixed(1);
+  const quotaMB = (s.quota / 1024 / 1024).toFixed(0);
+  const pct = Math.min(100, Math.round(s.used / s.quota * 100));
+  el.textContent = `${usedMB} MB / ${quotaMB} MB (${pct}%)`;
+}
+
+function showYtProgress(msg, pct) {
+  const el = document.getElementById('yt-progress');
+  if (!el) return;
+  el.classList.add('open');
+  el.querySelector('.ytp-msg').textContent = msg;
+  el.querySelector('.ytp-bar-inner').style.width = pct + '%';
+}
+
+function hideYtProgress() {
+  const el = document.getElementById('yt-progress');
+  if (el) el.classList.remove('open');
+}
+
+async function extractYoutubeAudio(url) {
+  const m = S.me || {};
+  const isFree = !m.premium && !m.is_admin;
+  if (isFree && S.localTracks.length >= 5) {
+    paywall({
+      message: 'Member Free dibatasi maks. 5 lagu. Upgrade Premium untuk menambah lagu YouTube tanpa batas!',
+      member_code: m.member_code,
+    });
+    return;
+  }
+
+  showYtProgress('Memproses link YouTube...', 5);
+  try {
+    // Step 1: Get metadata + trigger server-side download
+    showYtProgress('Mengambil info video dari YouTube...', 15);
+    const infoRes = await api('/youtube/info', 'POST', { url });
+    if (!infoRes.ok) {
+      hideYtProgress();
+      return toast('❌ ' + (infoRes.data?.error || 'Gagal memproses YouTube link'));
+    }
+    const { token, title, artist, duration, cover_url, size } = infoRes.data;
+
+    // Step 2: Check storage before fetching
+    showYtProgress('Memeriksa ruang penyimpanan browser...', 35);
+    const storage = await estimateStorage();
+    if (storage && storage.quota > 0 && (storage.quota - storage.used) < size * 2) {
+      hideYtProgress();
+      return toast('⚠️ Ruang penyimpanan browser tidak cukup. Hapus beberapa lagu terlebih dahulu.');
+    }
+
+    // Step 3: Fetch audio blob from server (one-time stream)
+    showYtProgress(`Mengunduh audio: ${title}`, 50);
+    let audioRes;
+    try {
+      audioRes = await fetch('/youtube/stream/' + token, { credentials: 'same-origin' });
+    } catch (fetchErr) {
+      hideYtProgress();
+      return toast('❌ Gagal mengunduh audio dari server. Periksa koneksi internet.');
+    }
+    if (!audioRes.ok) {
+      hideYtProgress();
+      return toast('❌ Audio sudah kedaluwarsa atau tidak ditemukan. Coba lagi.');
+    }
+
+    showYtProgress('Menyimpan audio ke perangkat...', 80);
+    const blob = await audioRes.blob();
+
+    // Step 4: Build local track object (same format as addLocalFiles)
+    const id = 'yt_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    const localTrack = {
+      id,
+      is_local: true,
+      title: title || 'Unknown',
+      artist: artist || 'YouTube',
+      album: 'YouTube Audio',
+      duration: duration || 0,
+      size: blob.size,
+      blob: blob,
+      blobUrl: null,
+      cover_url: cover_url || null,
+      created_at: new Date().toISOString(),
+      source: 'youtube',
+    };
+
+    showYtProgress('Menyimpan ke IndexedDB...', 93);
+    await saveLocalTrack(localTrack);
+    S.localTracks.push(localTrack);
+    S.byId.set(id, localTrack);
+
+    hideYtProgress();
+    toast('✅ "' + title + '" berhasil ditambahkan ke Musik Offline!');
+    render();
+  } catch (e) {
+    hideYtProgress();
+    toast('❌ Terjadi kesalahan: ' + (e.message || 'Unknown error'));
+    console.error('[YT Extract]', e);
+  }
+}
+
 function getAudioDuration(file) {
   return new Promise(resolve => {
     const tempAu = document.createElement('audio');
@@ -419,6 +533,10 @@ function renderMusicOfflineView() {
       <button class="btn-device-folder" data-act="pick-local-folder">
         <svg class="ic"><use href="#i-folder"/></svg>
         <span>Buka Folder</span>
+      </button>
+      <button class="btn-device-yt" data-act="youtube-link">
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 1.86-.14 3.23-.44 4.17-.27.86-.9 1.49-1.76 1.76-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 18c-3.19 0-5.17-.14-5.83-.44a2.5 2.5 0 01-1.76-1.76c-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L4 12c0-1.86.14-3.23.44-4.17a2.5 2.5 0 011.76-1.76c.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 6c3.19 0 5.17.14 5.83.44a2.5 2.5 0 011.73 1.73z"/></svg>
+        <span>Link YouTube</span>
       </button>
     </div>
   </div>`;
@@ -674,6 +792,10 @@ function renderAccountView() {
           <span>${isPrem || isAdmin ? 'Aktif' : `${Math.max(0, 5 - localCount)} slot tersisa`}</span>
         </div>
       </div>
+      <div class="ac-storage-row">
+        <span>Penyimpanan Browser</span>
+        <b id="ac-storage-val">Menghitung...</b>
+      </div>
     </div>`;
 
   if (IS_ADMIN) {
@@ -830,7 +952,7 @@ function render() {
     if (nav === 'music') $('#content').innerHTML = renderMusicOfflineView();
     else if (nav === 'video') $('#content').innerHTML = renderVideoView();
     else if (nav === 'playlists') $('#content').innerHTML = renderPlaylistsView();
-    else if (nav === 'account') $('#content').innerHTML = renderAccountView();
+    else if (nav === 'account') { $('#content').innerHTML = renderAccountView(); updateStorageDisplay(); }
   }
 
   bindDrop();
@@ -1501,6 +1623,18 @@ const A = {
   },
   'pick-local-files': () => $('#local-file-picker')?.click(),
   'pick-local-folder': () => $('#local-folder-picker')?.click(),
+  'youtube-link': () => {
+    promptDialog({
+      title: 'Tambah Lagu dari YouTube',
+      desc: 'Tempel link YouTube (video biasa, Shorts, atau YouTube Music)',
+      label: 'Link YouTube',
+      placeholder: 'https://youtu.be/... atau https://youtube.com/watch?v=...',
+      initialValue: '',
+      submitText: 'Ambil Audio',
+    }).then(url => {
+      if (url && url.trim()) extractYoutubeAudio(url.trim());
+    });
+  },
   'clear-local-music': async () => {
     const ok = await confirmDialog({
       title: 'Hapus Semua Musik Perangkat?',
