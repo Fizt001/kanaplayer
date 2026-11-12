@@ -1165,7 +1165,16 @@ async function playAt(i, startPos = 0) {
     }
 
     if (!t.blobUrl && t.blob) {
-      t.blobUrl = URL.createObjectURL(t.blob);
+      try {
+        t.blobUrl = URL.createObjectURL(t.blob);
+      } catch (e) {
+        toast('⚠️ File audio tidak dapat diakses. Silakan tambahkan lagu kembali.');
+        return false;
+      }
+    }
+    if (!t.blobUrl) {
+      toast('⚠️ File audio tidak ditemukan. Silakan tambahkan lagu kembali dari perangkat.');
+      return false;
     }
     S.qi = i;
     au.src = t.blobUrl || '';
@@ -1205,10 +1214,14 @@ async function playAt(i, startPos = 0) {
 
 function playContext(ids, startId, shuffle = S.shuffle) {
   if (!ids.length) return;
-  S.shuffle = shuffle; S.orig = ids.slice();
-  S.queue = shuffle ? [startId, ...shuffleArr(ids.filter(x => x !== startId))] : ids.slice();
+  // Pastikan startId ada di dalam ids (tambahkan jika perlu)
+  const allIds = ids.includes(startId) ? ids : [startId, ...ids];
+  S.shuffle = shuffle; S.orig = allIds.slice();
+  S.queue = shuffle ? [startId, ...shuffleArr(allIds.filter(x => x !== startId))] : allIds.slice();
   syncModes();
-  playAt(S.queue.indexOf(startId));
+  const idx = S.queue.indexOf(startId);
+  if (idx < 0) return; // seharusnya tidak terjadi
+  playAt(idx);
 }
 
 function next(auto = false) {
@@ -1954,7 +1967,9 @@ const A = {
     if (S.ytActive) {
       stopYTAudio();
     }
-    playContext(S.ctx, id);
+    // Pastikan S.ctx valid — jika kosong atau tidak include track ini, pakai semua localTracks
+    const ctx = (S.ctx && S.ctx.length) ? S.ctx : S.localTracks.map(x => x.id);
+    playContext(ctx, id);
   },
   menu: el => {
     const t = findTrack(el.dataset.id);
