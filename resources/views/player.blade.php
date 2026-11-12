@@ -134,7 +134,7 @@
   </div>
 
   {{-- Mini Player --}}
-  <div id="mini" hidden>
+  <div id="mini" data-act="open-np" hidden>
     <div class="prog"><i id="mprog"></i></div>
     <div class="in" data-act="open-np">
       <div class="cv" id="mcv"><svg class="ic"><use href="#i-note"/></svg></div>

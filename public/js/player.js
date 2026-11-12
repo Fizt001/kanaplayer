@@ -638,7 +638,19 @@ function playNextYT() {
   if (!ytLinks.length || !ytCurrentId) return;
   const idx = ytLinks.findIndex(x => x.videoId === ytCurrentId);
   if (idx !== -1) {
-    const nextIdx = (idx + 1) % ytLinks.length;
+    if (S.repeat === 'one') {
+      au.currentTime = 0;
+      au.play().catch(() => {});
+      return;
+    }
+    let nextIdx;
+    if (S.shuffle && ytLinks.length > 1) {
+      do {
+        nextIdx = Math.floor(Math.random() * ytLinks.length);
+      } while (nextIdx === idx);
+    } else {
+      nextIdx = (idx + 1) % ytLinks.length;
+    }
     playYTAudio(ytLinks[nextIdx].videoId);
   }
 }
@@ -1229,6 +1241,11 @@ function toggle() {
 
 function toggleShuffle() {
   S.shuffle = !S.shuffle;
+  if (S.ytActive) {
+    syncModes();
+    toast(S.shuffle ? 'Acak YouTube: aktif' : 'Acak YouTube: mati');
+    return;
+  }
   const id = S.queue[S.qi];
   if (S.qi >= 0) {
     if (S.shuffle) S.queue = [...S.queue.slice(0, S.qi + 1), ...shuffleArr(S.queue.slice(S.qi + 1))];
@@ -1239,7 +1256,8 @@ function toggleShuffle() {
 }
 function cycleRepeat() {
   S.repeat = {off: 'all', all: 'one', one: 'off'}[S.repeat];
-  syncModes(); saveState();
+  syncModes();
+  if (!S.ytActive) saveState();
   toast({off: 'Ulangi: mati', all: 'Ulangi semua', one: 'Ulangi satu lagu'}[S.repeat]);
 }
 function syncModes() {
@@ -1278,6 +1296,22 @@ function removeQ(i) {
 }
 function renderQueue() {
   const el = $('#qlist');
+  if (S.ytActive) {
+    if (!ytLinks.length) { el.innerHTML = '<div class="empty">Antrean YouTube kosong.</div>'; return; }
+    let h = '';
+    const curIdx = ytLinks.findIndex(x => x.videoId === ytCurrentId);
+    ytLinks.forEach((entry, i) => {
+      const isCur = i === curIdx;
+      if (isCur) h += '<div class="qlabel">Sedang diputar</div>';
+      else if (i === curIdx + 1) h += '<div class="qlabel">Berikutnya</div>';
+      h += `<div class="qrow ${isCur ? 'on' : ''}" data-act="yt-play" data-vid="${esc(entry.videoId)}">
+        ${coverHtml(entry.thumbnail)}<div class="tx"><b>${esc(entry.title)}</b><span>${esc(entry.author || 'YouTube')}</span></div>
+      </div>`;
+    });
+    el.innerHTML = h;
+    const on = el.querySelector('.qrow.on'); if (on) on.scrollIntoView({block: 'center'});
+    return;
+  }
   if (!S.queue.length) { el.innerHTML = '<div class="empty">Antrean kosong.</div>'; return; }
   let h = '';
   S.queue.forEach((id, i) => {
@@ -1540,7 +1574,27 @@ function paywall(d) {
 }
 
 /* Now Playing / Antrean modal */
-function openNp() { if (S.qi >= 0) { $('#np').classList.add('open'); history.pushState({np: 1}, ''); } }
+function openNp() {
+  if (S.qi >= 0 || S.ytActive) {
+    if (S.ytActive && ytCurrentId) {
+      const entry = ytLinks.find(x => x.videoId === ytCurrentId);
+      if (entry) {
+        $('#nttl').textContent = entry.title;
+        $('#nart').textContent = entry.author || 'YouTube';
+        coverEl($('#bigcv'), { cover_url: entry.thumbnail });
+        $('#npsrc').textContent = 'YouTube Audio';
+      }
+      if (isFinite(au.duration) && au.duration > 0) {
+        $('#tdur').textContent = fmt(au.duration);
+        $('#seek').value = (au.currentTime / au.duration) * 1000;
+      }
+      $('#tcur').textContent = fmt(au.currentTime);
+      ppUI();
+    }
+    $('#np').classList.add('open');
+    history.pushState({np: 1}, '');
+  }
+}
 function closeNp() { $('#np').classList.remove('open'); }
 window.addEventListener('popstate', () => {
   if ($('#queue').classList.contains('open')) $('#queue').classList.remove('open');
@@ -1598,14 +1652,16 @@ au.addEventListener('ended', () => {
   if (S.sleep && S.sleep.eot) { S.sleep = null; sleepUI(); au.pause(); return; }
   next(true);
 });
+au.addEventListener('loadedmetadata', () => {
+  if (isFinite(au.duration) && au.duration > 0) {
+    $('#tdur').textContent = fmt(au.duration);
+  }
+});
 au.addEventListener('error', () => { if (au.src) toast('Tidak bisa memutar lagu ini'); });
 $('#seek').addEventListener('input', e => {
-  if (S.ytActive && ytPlayer) {
-    const dur = ytPlayer.getDuration() || 0;
-    if (dur > 0) ytPlayer.seekTo((e.target.value / 1000) * dur, true);
-    return;
+  if (isFinite(au.duration) && au.duration > 0) {
+    au.currentTime = (e.target.value / 1000) * au.duration;
   }
-  if (isFinite(au.duration)) au.currentTime = e.target.value / 1000 * au.duration;
 });
 
 if ('mediaSession' in navigator) {
@@ -1826,7 +1882,12 @@ const A = {
   },
   'yt-play': el => {
     const vid = el.dataset.vid || el.closest('[data-vid]')?.dataset.vid;
-    if (vid) playYTAudio(vid);
+    if (!vid) return;
+    if (vid === ytCurrentId && S.ytActive) {
+      openNp();
+      return;
+    }
+    playYTAudio(vid);
   },
   'yt-toggle-play': () => toggleYTAudio(),
   'yt-stop': () => stopYTAudio(),
@@ -1869,6 +1930,10 @@ const A = {
   play: el => {
     const rawId = el.dataset.id;
     const id = rawId.startsWith('dev_') ? rawId : +rawId;
+    if (cur() && cur().id === id && !au.paused) {
+      openNp();
+      return;
+    }
     playContext(S.ctx, id);
   },
   menu: el => {
@@ -1898,10 +1963,43 @@ const A = {
   },
   'open-np': () => openNp(),
   'close-np': () => { if (history.state && history.state.np) history.back(); else closeNp(); },
-  'np-menu': () => { const t = cur(); if (t) trackMenu(t); },
+  'np-menu': () => {
+    if (S.ytActive && ytCurrentId) {
+      const entry = ytLinks.find(x => x.videoId === ytCurrentId);
+      sheet(entry?.title || 'YouTube Audio', [
+        {
+          label: 'Salin Link YouTube',
+          fn: () => {
+            const url = 'https://youtu.be/' + ytCurrentId;
+            (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject())
+              .then(() => toast('Link disalin ke clipboard'), () => toast(url));
+          }
+        },
+        {
+          label: 'Hapus dari Daftar Putar',
+          danger: true,
+          fn: () => {
+            const item = ytLinks.find(x => x.videoId === ytCurrentId);
+            if (item) {
+              stopYTAudio();
+              ytLinks = ytLinks.filter(x => x.id !== item.id);
+              saveYTLinks();
+              render();
+              toast('Dihapus dari daftar');
+            }
+          }
+        }
+      ]);
+      return;
+    }
+    const t = cur(); if (t) trackMenu(t);
+  },
   toggle: () => toggle(), next: () => next(), prev: () => prev(),
   shuffle: () => toggleShuffle(), repeat: () => cycleRepeat(),
-  fav: () => { const t = cur(); if (t) toggleFav(t); },
+  fav: () => {
+    if (S.ytActive) return toast('Lagu YouTube tidak dapat disimpan ke favorit offline');
+    const t = cur(); if (t) toggleFav(t);
+  },
   speed: () => sheet('Kecepatan putar', [0.5, 0.75, 1, 1.25, 1.5, 2].map(v =>
     ({label: v === 1 ? 'Normal (1x)' : `${v}x`, on: S.speed === v, fn: () => { S.speed = v; au.playbackRate = v; syncModes(); saveState(); }}))),
   sleep: () => sheet('Timer tidur', [
