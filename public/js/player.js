@@ -1147,7 +1147,7 @@ async function playAt(i, startPos = 0) {
   }
   const id = S.queue[i];
   const t = findTrack(id);
-  if (!t) return false;
+  if (!t) { toast(`[DEBUG] Track tidak ditemukan: qi=${i} id=${id} qlen=${S.queue.length}`); return false; }
 
   // Lagu dari perangkat lokal: Putar via Blob URL (GRATIS, tidak pakai kuota server)
   if (t.is_local || String(id).startsWith('dev_') || String(id).startsWith('yt_') || t.blob) {
@@ -1156,19 +1156,19 @@ async function playAt(i, startPos = 0) {
       try {
         t.blobUrl = URL.createObjectURL(t.blob);
       } catch (e) {
-        toast('⚠️ File audio tidak dapat diakses. Silakan tambahkan lagu kembali.');
+        toast(`[DEBUG] createObjectURL gagal: ${e.message}`);
         return false;
       }
     }
     if (!t.blobUrl) {
-      toast('⚠️ File audio tidak ditemukan. Silakan tambahkan lagu kembali dari perangkat.');
+      toast(`[DEBUG] blobUrl null, blob=${!!t.blob} is_local=${t.is_local} id=${String(id).slice(0,12)}`);
       return false;
     }
     S.qi = i;
     au.src = t.blobUrl || '';
     au.playbackRate = S.speed;
     if (startPos > 1) au.addEventListener('loadedmetadata', () => { au.currentTime = startPos; }, {once: true});
-    try { await au.play(); } catch (e) {}
+    try { await au.play(); } catch (e) { toast(`[DEBUG] au.play() gagal: ${e.message}`); }
     nowUI(t);
     saveState();
     markNow();
@@ -1946,7 +1946,7 @@ const A = {
   play: el => {
     const rawId = el.dataset.id;
     const t = findTrack(rawId);
-    if (!t) return;
+    if (!t) { toast(`[DEBUG] findTrack gagal: rawId=${rawId} localLen=${S.localTracks.length}`); return; }
     const id = t.id;
     if (!S.ytActive && cur() && String(cur().id) === String(id) && !au.paused) {
       openNp();
@@ -1956,6 +1956,7 @@ const A = {
     const ctx = (S.ctx && S.ctx.length && S.ctx.some(x => findTrack(x)))
       ? S.ctx
       : S.localTracks.map(x => x.id);
+    toast(`[DEBUG] play id=${String(id).slice(0,10)} ctx=${ctx.length} ytActive=${S.ytActive}`);
     if (S.ytActive) {
       stopYTAudio(true); // skip render, langsung lanjut ke offline
     }
