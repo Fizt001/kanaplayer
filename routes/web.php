@@ -14,6 +14,9 @@ Route::middleware('guest')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
 });
 
+// Stream audio langsung YouTube (bisa diakses oleh elemen <audio> browser/mobile tanpa kendala cookie AVPlayer)
+Route::get('/youtube/stream-direct/{videoId}', [YoutubeController::class, 'streamDirect']);
+
 // Semua yang di bawah ini wajib login (tanpa daftar tidak bisa masuk).
 Route::middleware('auth')->group(function () {
     Route::get('/', fn () => view('player'))->name('home');
@@ -35,7 +38,6 @@ Route::middleware('auth')->group(function () {
 
     // YouTube-to-Audio extraction & stream engine
     Route::post('/youtube/meta', [YoutubeController::class, 'meta']);
-    Route::get('/youtube/stream-direct/{videoId}', [YoutubeController::class, 'streamDirect']);
     Route::post('/youtube/info', [YoutubeController::class, 'info']);
     Route::get('/youtube/stream/{token}', [YoutubeController::class, 'stream']);
 
