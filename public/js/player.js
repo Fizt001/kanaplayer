@@ -1149,20 +1149,8 @@ async function playAt(i, startPos = 0) {
   const t = findTrack(id);
   if (!t) return false;
 
-  // Lagu dari perangkat lokal: Putar via Blob URL (cek kuota harian jika member Free)
+  // Lagu dari perangkat lokal: Putar via Blob URL (GRATIS, tidak pakai kuota server)
   if (t.is_local || String(id).startsWith('dev_') || String(id).startsWith('yt_') || t.blob) {
-    const m = S.me || {};
-    const isFree = !m.premium && !m.is_admin;
-    if (isFree && m.remaining !== null && m.remaining <= 0) {
-      au.pause();
-      paywall({
-        message: 'Kuota harian Anda habis. Upgrade ke Premium untuk memutar musik tanpa batas!',
-        member_code: m.member_code,
-        payment_info: m.payment_info,
-        price: m.price,
-      });
-      return false;
-    }
 
     if (!t.blobUrl && t.blob) {
       try {
