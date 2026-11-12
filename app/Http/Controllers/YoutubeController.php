@@ -9,45 +9,101 @@ use Illuminate\Support\Str;
 class YoutubeController extends Controller
 {
     /**
+     * Normalize a YouTube URL to a clean single-video URL.
+     * Strips playlist, radio, and other extra parameters.
+     * Handles: watch?v=, youtu.be/, shorts/, music.youtube.com/watch?v=
+     */
+    private function normalizeYoutubeUrl(string $url): string
+    {
+        $parsed = parse_url($url);
+        $host   = strtolower($parsed['host'] ?? '');
+        $path   = $parsed['path'] ?? '/';
+
+        // Parse query string into array
+        parse_str($parsed['query'] ?? '', $params);
+
+        // youtu.be/VIDEO_ID → extract video ID from path
+        if (str_contains($host, 'youtu.be')) {
+            $videoId = ltrim($path, '/');
+            if ($videoId) {
+                return 'https://www.youtube.com/watch?v=' . $videoId;
+            }
+            return $url; // fallback
+        }
+
+        // /shorts/VIDEO_ID
+        if (preg_match('#^/shorts/([a-zA-Z0-9_-]+)#', $path, $m)) {
+            return 'https://www.youtube.com/watch?v=' . $m[1];
+        }
+
+        // youtube.com/watch?v=... → keep only v= param
+        if (isset($params['v']) && $params['v']) {
+            return 'https://www.youtube.com/watch?v=' . $params['v'];
+        }
+
+        // music.youtube.com/watch?v=...
+        if (isset($params['v'])) {
+            return 'https://www.youtube.com/watch?v=' . $params['v'];
+        }
+
+        return $url; // unchanged as fallback
+    }
+
+    /**
      * POST /youtube/info
      * Validate YouTube URL, extract metadata, download audio, return token + metadata.
      */
     public function info(Request $request)
     {
-        set_time_limit(180);
+        set_time_limit(300);
 
         $request->validate(['url' => ['required', 'string', 'max:500']]);
         $url = trim($request->input('url'));
 
-        // Validate YouTube URL pattern
+        // Validate YouTube URL pattern (supports watch, shorts, youtu.be, music)
         if (!preg_match('/^https?:\/\/(www\.)?(youtube\.com\/(watch\?|shorts\/)|youtu\.be\/|music\.youtube\.com\/watch\?)/i', $url)) {
             return response()->json(['error' => 'URL harus berupa link YouTube yang valid (youtube.com atau youtu.be).'], 422);
         }
+
+        // Normalize URL: strip playlist/radio/mix params, keep only video ID
+        // e.g. youtube.com/watch?v=ID&list=RDxxx&start_radio=1 → youtube.com/watch?v=ID
+        $url = $this->normalizeYoutubeUrl($url);
 
         $tmpDir = storage_path('app/yt_tmp');
         if (!is_dir($tmpDir)) {
             mkdir($tmpDir, 0755, true);
         }
 
-        $token = Str::random(32);
+        $token   = Str::random(32);
         $tmpBase = $tmpDir . '/' . $token;
-        $ytdlp = '/usr/local/bin/yt-dlp';
+        $ytdlp   = '/usr/local/bin/yt-dlp';
 
         // Check yt-dlp exists
         if (!file_exists($ytdlp)) {
             return response()->json(['error' => 'Layanan YouTube belum siap di server. Hubungi administrator.'], 503);
         }
 
-        // Step 1: Get metadata (JSON dump)
+        // Step 1: Get metadata (JSON dump) — no --flat-playlist to avoid playlist-mode interference
         $metaCmd = $ytdlp
-            . ' --dump-json --no-playlist --flat-playlist --quiet --no-warnings'
+            . ' --dump-json --no-playlist --quiet --no-warnings'
             . ' --socket-timeout 30'
             . ' ' . escapeshellarg($url)
             . ' 2>&1';
 
         exec($metaCmd, $metaLines, $exitCode);
         $metaOutput = implode('', $metaLines);
-        $meta = json_decode($metaOutput, true);
+        $meta       = json_decode($metaOutput, true);
+
+        if (!$meta || !isset($meta['title'])) {
+            // Try once more without --no-playlist in case it's a single video with playlist context
+            $metaCmd2 = $ytdlp
+                . ' --dump-json --playlist-items 1 --quiet --no-warnings'
+                . ' --socket-timeout 30'
+                . ' ' . escapeshellarg($url)
+                . ' 2>&1';
+            exec($metaCmd2, $metaLines2, $exitCode2);
+            $meta = json_decode(implode('', $metaLines2), true);
+        }
 
         if (!$meta || !isset($meta['title'])) {
             return response()->json([
@@ -55,10 +111,11 @@ class YoutubeController extends Controller
             ], 422);
         }
 
-        // Check duration (reject streams > 2 hours or no duration)
         $duration = (int)($meta['duration'] ?? 0);
-        if ($duration > 7200) {
-            return response()->json(['error' => 'Video terlalu panjang (maks. 2 jam). Gunakan video musik yang lebih pendek.'], 422);
+
+        // Reject only true live streams (duration = 0 and is_live flag)
+        if ($duration === 0 && !empty($meta['is_live'])) {
+            return response()->json(['error' => 'Live stream tidak bisa diunduh. Gunakan video yang sudah selesai.'], 422);
         }
 
         // Step 2: Download audio as m4a
@@ -66,16 +123,16 @@ class YoutubeController extends Controller
             . ' --no-playlist -x --audio-format m4a --audio-quality 128K'
             . ' -o ' . escapeshellarg($tmpBase . '.%(ext)s')
             . ' --quiet --no-warnings'
-            . ' --socket-timeout 60'
+            . ' --socket-timeout 120'
             . ' ' . escapeshellarg($url)
             . ' 2>&1';
 
         exec($dlCmd, $dlOutput, $dlExit);
 
-        // Find the downloaded file
+        // Find the downloaded file (might be .m4a or .aac etc)
         $audioFile = $tmpBase . '.m4a';
         if (!file_exists($audioFile)) {
-            $files = glob($tmpBase . '.*');
+            $files     = glob($tmpBase . '.*');
             $audioFile = ($files && count($files) > 0) ? $files[0] : null;
         }
 
@@ -86,11 +143,11 @@ class YoutubeController extends Controller
         }
 
         // Step 3: Determine thumbnail URL (use YouTube CDN directly, no download)
-        $videoId = $meta['id'] ?? null;
+        $videoId      = $meta['id'] ?? null;
         $thumbnailUrl = null;
         if ($videoId) {
             foreach (['maxresdefault', 'hqdefault', 'mqdefault', 'default'] as $quality) {
-                $t = "https://i.ytimg.com/vi/{$videoId}/{$quality}.jpg";
+                $t       = "https://i.ytimg.com/vi/{$videoId}/{$quality}.jpg";
                 $headers = @get_headers($t);
                 if ($headers && str_contains($headers[0], '200')) {
                     $thumbnailUrl = $t;
