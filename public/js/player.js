@@ -697,19 +697,22 @@ function initYTEngine() {
 }
 
 function handleYTStateChange(state) {
+  ytState = state;
   if (state === 1) { // playing
+    S.ytActive = true;
     const au = $('#au');
     if (au && !au.paused) {
       au.pause();
-      S.playing = false;
-      renderPlayState();
     }
+    $('#mpp').innerHTML = $('#npp').innerHTML = '<use href="#i-pause"/>';
     startYTTimer();
-  } else if (state === 2 || state === 0) { // paused or ended
+  } else if (state === 2) { // paused
+    $('#mpp').innerHTML = $('#npp').innerHTML = '<use href="#i-play"/>';
     clearInterval(ytTimer);
-    if (state === 0) {
-      playNextYT();
-    }
+  } else if (state === 0) { // ended
+    $('#mpp').innerHTML = $('#npp').innerHTML = '<use href="#i-play"/>';
+    clearInterval(ytTimer);
+    playNextYT();
   }
   renderYTControls();
 }
@@ -717,8 +720,18 @@ function handleYTStateChange(state) {
 function playNextYT() {
   if (!ytLinks.length || !ytCurrentId) return;
   const idx = ytLinks.findIndex(x => x.videoId === ytCurrentId);
-  if (idx !== -1 && idx + 1 < ytLinks.length) {
-    playYTAudio(ytLinks[idx + 1].videoId);
+  if (idx !== -1) {
+    const nextIdx = (idx + 1) % ytLinks.length;
+    playYTAudio(ytLinks[nextIdx].videoId);
+  }
+}
+
+function playPrevYT() {
+  if (!ytLinks.length || !ytCurrentId) return;
+  const idx = ytLinks.findIndex(x => x.videoId === ytCurrentId);
+  if (idx !== -1) {
+    const prevIdx = idx > 0 ? idx - 1 : ytLinks.length - 1;
+    playYTAudio(ytLinks[prevIdx].videoId);
   }
 }
 
@@ -735,27 +748,26 @@ function renderYTProgress() {
   try {
     const cur = ytPlayer.getCurrentTime() || 0;
     const dur = ytPlayer.getDuration() || 0;
-    const curEl = document.getElementById('yta-cur');
-    const durEl = document.getElementById('yta-dur');
-    const fillEl = document.getElementById('yta-fill');
-    if (curEl) curEl.textContent = fmt(cur);
-    if (durEl) durEl.textContent = fmt(dur);
-    if (fillEl && dur > 0) {
-      fillEl.style.width = Math.min(100, (cur / dur) * 100) + '%';
+
+    if (dur > 0) {
+      const pct = Math.min(100, (cur / dur) * 100);
+      const mprog = $('#mprog');
+      if (mprog) mprog.style.width = pct + '%';
+      const seek = $('#seek');
+      if (seek) seek.value = (cur / dur) * 1000;
     }
+
+    const tcur = $('#tcur');
+    if (tcur) tcur.textContent = fmt(cur);
+    const tdur = $('#tdur');
+    if (tdur) tdur.textContent = fmt(dur);
   } catch (e) {}
 }
 
 function renderYTControls() {
-  const btn = document.querySelector('.yta-play-btn');
-  if (btn) {
-    const isPlaying = ytState === 1;
-    btn.innerHTML = isPlaying
-      ? `<svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`
-      : `<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
-  }
   document.querySelectorAll('.yta-row').forEach(row => {
-    const isCur = row.dataset.id === ytCurrentId;
+    const vid = row.querySelector('[data-vid]')?.dataset.vid;
+    const isCur = vid === ytCurrentId;
     row.classList.toggle('playing', isCur && ytState === 1);
   });
 }
@@ -763,13 +775,33 @@ function renderYTControls() {
 function playYTAudio(videoId) {
   ensureYTAPI();
   ytCurrentId = videoId;
+  S.ytActive = true;
 
   // Pause local audio player
   const au = $('#au');
   if (au && !au.paused) {
     au.pause();
-    S.playing = false;
-    renderPlayState();
+  }
+
+  const entry = ytLinks.find(x => x.videoId === videoId);
+  if (entry) {
+    // Tampilkan di bottom player bar (#mini) dan Now Playing sheet (#np)
+    $('#mini').hidden = false;
+    $('#mttl').textContent = $('#nttl').textContent = entry.title;
+    $('#mart').textContent = $('#nart').textContent = entry.author || 'YouTube';
+    coverEl($('#mcv'), { cover_url: entry.thumbnail });
+    coverEl($('#bigcv'), { cover_url: entry.thumbnail });
+    $('#npsrc').textContent = 'YouTube Audio';
+    document.title = `${entry.title} - KanaMusic`;
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: entry.title,
+        artist: entry.author || 'YouTube',
+        album: 'YouTube Audio',
+        artwork: [{ src: entry.thumbnail, sizes: '480x360' }],
+      });
+    }
   }
 
   if (ytPlayer && ytReady) {
@@ -795,6 +827,7 @@ function playYTAudio(videoId) {
     }, 300);
   }
 
+  $('#mpp').innerHTML = $('#npp').innerHTML = '<use href="#i-pause"/>';
   if (S.nav === 'video') {
     render();
   }
@@ -819,6 +852,9 @@ function stopYTAudio() {
   clearInterval(ytTimer);
   ytCurrentId = null;
   ytState = -1;
+  S.ytActive = false;
+  $('#mini').hidden = true;
+  closeNp();
   render();
 }
 
@@ -880,7 +916,6 @@ async function addYTLink(url) {
    ======================================================== */
 function renderVideoView() {
   ensureYTAPI();
-  const curEntry = ytLinks.find(l => l.videoId === ytCurrentId);
 
   let h = `
   <div class="yta-wrap">
@@ -890,7 +925,7 @@ function renderVideoView() {
           <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22" style="vertical-align:-4px;margin-right:6px"><path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 1.86-.14 3.23-.44 4.17-.27.86-.9 1.49-1.76 1.76-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 18c-3.19 0-5.17-.14-5.83-.44a2.5 2.5 0 01-1.76-1.76c-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L4 12c0-1.86.14-3.23.44-4.17a2.5 2.5 0 011.76-1.76c.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 6c3.19 0 5.17.14 5.83.44a2.5 2.5 0 011.73 1.73z"/></svg>
           Mesin Audio YouTube
         </h3>
-        <p>Putar audio dari YouTube langsung tanpa perlu download atau convert.</p>
+        <p>Putar audio dari YouTube langsung di pemutar bawah.</p>
       </div>
       <button class="btn-yta-add" data-act="yt-add-link">
         <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
@@ -898,41 +933,13 @@ function renderVideoView() {
       </button>
     </div>`;
 
-  if (curEntry) {
-    h += `
-    <div class="yta-now-playing">
-      <img class="yta-np-thumb" src="${esc(curEntry.thumbnail)}" alt="">
-      <div class="yta-np-body">
-        <b class="yta-np-title">${esc(curEntry.title)}</b>
-        <span class="yta-np-author">${esc(curEntry.author)}</span>
-        <div class="yta-np-controls">
-          <button class="yta-np-btn yta-play-btn" data-act="yt-toggle-play" title="Putar / Jeda">
-            ${ytState === 1
-              ? `<svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`
-              : `<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`}
-          </button>
-          <div class="yta-np-seek-wrap">
-            <span class="yta-np-cur" id="yta-cur">0:00</span>
-            <div class="yta-np-seek" id="yta-seek-bar" data-act="yt-seek">
-              <div class="yta-np-seek-fill" id="yta-fill"></div>
-            </div>
-            <span class="yta-np-dur" id="yta-dur">0:00</span>
-          </div>
-          <button class="yta-np-btn yta-stop-btn" data-act="yt-stop" title="Berhenti">
-            <svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-          </button>
-        </div>
-      </div>
-    </div>`;
-  }
-
   if (!ytLinks.length) {
     h += `
     <div class="empty" style="padding:48px 16px;text-align:center;">
       <div style="font-size:40px;margin-bottom:12px;">🎵</div>
       <b style="display:block;font-size:16px;color:var(--txt);margin-bottom:6px;">Belum Ada Lagu YouTube</b>
       <p style="color:var(--mut);font-size:13px;max-width:380px;margin:0 auto 16px;line-height:1.5;">
-        Klik <b style="color:var(--txt)">Tambah Link</b> di atas, tempel tautan video YouTube (termasuk Mix, Radio, Musik), dan audio akan langsung diputar!
+        Klik <b style="color:var(--txt)">Tambah Link</b> di atas, tempel tautan video YouTube (termasuk Mix, Radio, Musik), dan audio akan langsung diputar di pemutar bawah!
       </p>
       <button class="btn-yta-add" data-act="yt-add-link" style="margin:0 auto;">
         <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
@@ -1220,7 +1227,7 @@ function render() {
   } else {
     h1.classList.remove('sub');
     if (nav === 'music') h1.textContent = 'Musik';
-    else if (nav === 'video') h1.textContent = 'Player Video';
+    else if (nav === 'video') h1.textContent = 'YouTube Audio';
     else if (nav === 'playlists') h1.textContent = 'Playlist';
     else if (nav === 'account') h1.textContent = 'Setting Akun';
   }
@@ -1259,6 +1266,10 @@ function markNow() {
    PEMUTARAN AUDIO & KONTROL
    ======================================================== */
 async function playAt(i, startPos = 0) {
+  S.ytActive = false;
+  if (ytPlayer && ytState === 1) {
+    try { ytPlayer.pauseVideo(); } catch (e) {}
+  }
   const id = S.queue[i];
   const t = S.byId.get(id) || S.localTracks.find(x => x.id === id);
   if (!t) return false;
@@ -1326,6 +1337,10 @@ function playContext(ids, startId, shuffle = S.shuffle) {
 }
 
 function next(auto = false) {
+  if (S.ytActive) {
+    playNextYT();
+    return;
+  }
   if (!S.queue.length) return;
   if (auto && S.repeat === 'one') { au.currentTime = 0; au.play(); return; }
   let i = S.qi + 1;
@@ -1336,11 +1351,19 @@ function next(auto = false) {
   playAt(i);
 }
 function prev() {
+  if (S.ytActive) {
+    playPrevYT();
+    return;
+  }
   if (!S.queue.length) return;
   if (au.currentTime > 3 || (S.qi <= 0 && S.repeat !== 'all')) { au.currentTime = 0; return; }
   playAt(S.qi <= 0 ? S.queue.length - 1 : S.qi - 1);
 }
 function toggle() {
+  if (S.ytActive) {
+    toggleYTAudio();
+    return;
+  }
   if (!au.src) {
     if (S.qi >= 0) { playAt(S.qi, S.resume || 0); S.resume = null; }
     else if (S.ctx.length) playContext(S.ctx, S.ctx[0]);
@@ -1720,7 +1743,14 @@ au.addEventListener('ended', () => {
   next(true);
 });
 au.addEventListener('error', () => { if (au.src) toast('Tidak bisa memutar lagu ini'); });
-$('#seek').addEventListener('input', e => { if (isFinite(au.duration)) au.currentTime = e.target.value / 1000 * au.duration; });
+$('#seek').addEventListener('input', e => {
+  if (S.ytActive && ytPlayer) {
+    const dur = ytPlayer.getDuration() || 0;
+    if (dur > 0) ytPlayer.seekTo((e.target.value / 1000) * dur, true);
+    return;
+  }
+  if (isFinite(au.duration)) au.currentTime = e.target.value / 1000 * au.duration;
+});
 
 if ('mediaSession' in navigator) {
   const ms = navigator.mediaSession;
