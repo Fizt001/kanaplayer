@@ -116,4 +116,12 @@ class PlayerFeaturesTest extends TestCase
         $res->assertOk()
             ->assertJsonPath('videoId', 'xwh4tFI2TIk');
     }
+
+    public function test_youtube_stream_direct_validates_id(): void
+    {
+        $u = User::factory()->create();
+
+        $this->actingAs($u)->get('/youtube/stream-direct/invalid$$id')
+            ->assertStatus(404);
+    }
 }

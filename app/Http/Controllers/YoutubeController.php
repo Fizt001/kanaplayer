@@ -110,6 +110,69 @@ class YoutubeController extends Controller
     }
 
     /**
+     * GET /youtube/stream-direct/{videoId}
+     * Direct audio proxy stream to HTML5 <audio> tag.
+     * Enables true mobile background playback (screen locked, app switched).
+     */
+    public function streamDirect(Request $request, string $videoId)
+    {
+        if (!preg_match('/^[a-zA-Z0-9_-]{6,15}$/', $videoId)) {
+            abort(404);
+        }
+
+        $streamUrl = Cache::remember('yt_stream_' . $videoId, now()->addHours(3), function () use ($videoId) {
+            $cmd = '/usr/local/bin/yt-dlp -g -f ' . escapeshellarg('ba[ext=m4a]/ba/b')
+                . ' --socket-timeout 10 --quiet --no-warnings '
+                . escapeshellarg('https://www.youtube.com/watch?v=' . $videoId);
+            exec($cmd, $lines, $code);
+            return $lines[0] ?? null;
+        });
+
+        if (!$streamUrl) {
+            abort(404, 'Audio stream tidak ditemukan.');
+        }
+
+        $range = $request->header('Range');
+
+        return response()->stream(function () use ($streamUrl, $range) {
+            $ch = curl_init($streamUrl);
+            $headers = [
+                'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept: */*',
+            ];
+            if ($range) {
+                $headers[] = 'Range: ' . $range;
+            }
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_BUFFERSIZE, 128 * 1024);
+            curl_setopt($ch, CURLOPT_HEADERFUNCTION, function ($ch, $headerLine) {
+                $trimmed = trim($headerLine);
+                if (stripos($trimmed, 'Content-Type:') === 0 ||
+                    stripos($trimmed, 'Content-Range:') === 0 ||
+                    stripos($trimmed, 'Content-Length:') === 0 ||
+                    stripos($trimmed, 'Accept-Ranges:') === 0) {
+                    header($trimmed);
+                }
+                return strlen($headerLine);
+            });
+            curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) {
+                echo $chunk;
+                if (ob_get_level() > 0) ob_flush();
+                flush();
+                return strlen($chunk);
+            });
+            curl_exec($ch);
+            curl_close($ch);
+        }, $range ? 206 : 200, [
+            'Content-Type' => 'audio/mp4',
+            'Accept-Ranges' => 'bytes',
+            'Cache-Control' => 'no-cache',
+        ]);
+    }
+
+    /**
      * POST /youtube/info
      * Validate YouTube URL, extract metadata, download audio, return token + metadata.
      */

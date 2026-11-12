@@ -35,6 +35,7 @@ Route::middleware('auth')->group(function () {
 
     // YouTube-to-Audio extraction & stream engine
     Route::post('/youtube/meta', [YoutubeController::class, 'meta']);
+    Route::get('/youtube/stream-direct/{videoId}', [YoutubeController::class, 'streamDirect']);
     Route::post('/youtube/info', [YoutubeController::class, 'info']);
     Route::get('/youtube/stream/{token}', [YoutubeController::class, 'stream']);
 

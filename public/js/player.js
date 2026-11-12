@@ -616,7 +616,7 @@ function renderMusicOfflineView() {
 }
 
 /* ========================================================
-   YOUTUBE AUDIO STREAMING ENGINE (IFrame Player API)
+   YOUTUBE AUDIO STREAMING ENGINE (HTML5 Background Audio)
    ======================================================== */
 const YT_STORAGE_KEY = 'playermp3_yt_links';
 let ytLinks = [];
@@ -626,95 +626,12 @@ try {
   ytLinks = [];
 }
 
-let ytPlayer = null;
-let ytReady = false;
 let ytCurrentId = null;
-let ytState = -1; // -1: unstarted, 0: ended, 1: playing, 2: paused, 3: buffering
-let ytTimer = null;
 
 function saveYTLinks() {
   try {
     localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(ytLinks));
   } catch (e) {}
-}
-
-function ensureYTAPI() {
-  if (window.YT && window.YT.Player) {
-    if (!ytPlayer && document.getElementById('yt-engine-iframe')) {
-      initYTEngine();
-    }
-    return;
-  }
-  if (document.getElementById('yt-iframe-script')) return;
-  const tag = document.createElement('script');
-  tag.id = 'yt-iframe-script';
-  tag.src = 'https://www.youtube.com/iframe_api';
-  document.head.appendChild(tag);
-}
-
-window.onYouTubeIframeAPIReady = function() {
-  initYTEngine();
-};
-
-function initYTEngine() {
-  if (ytPlayer) return;
-  const target = document.getElementById('yt-engine-iframe');
-  if (!target) return;
-
-  try {
-    ytPlayer = new YT.Player('yt-engine-iframe', {
-      height: '1',
-      width: '1',
-      playerVars: {
-        playsinline: 1,
-        controls: 0,
-        disablekb: 1,
-        fs: 0,
-        rel: 0,
-        origin: window.location.origin,
-      },
-      events: {
-        onReady: () => {
-          ytReady = true;
-          if (ytCurrentId) {
-            try { ytPlayer.loadVideoById(ytCurrentId); } catch (e) {}
-          }
-        },
-        onStateChange: (e) => {
-          ytState = e.data;
-          handleYTStateChange(e.data);
-        },
-        onError: (err) => {
-          console.warn('YT Audio Engine Error', err);
-          toast('⚠️ Video tidak dapat diputar via audio engine (mungkin dibatasi oleh YouTube).');
-          clearInterval(ytTimer);
-        }
-      }
-    });
-  } catch (e) {
-    console.warn('initYTEngine failed', e);
-  }
-}
-
-function handleYTStateChange(state) {
-  ytState = state;
-  if (state === 1) { // playing
-    S.ytActive = true;
-    const au = $('#au');
-    if (au && !au.paused) {
-      au.pause();
-    }
-    $('#mpp').innerHTML = $('#npp').innerHTML = '<use href="#i-pause"/>';
-    startYTTimer();
-  } else if (state === 2) { // paused
-    $('#mpp').innerHTML = $('#npp').innerHTML = '<use href="#i-play"/>';
-    clearInterval(ytTimer);
-  } else if (state === 0) { // ended
-    $('#mpp').innerHTML = $('#npp').innerHTML = '<use href="#i-play"/>';
-    clearInterval(ytTimer);
-    playNextYT();
-  }
-  renderYTControls();
 }
 
 function playNextYT() {
@@ -735,53 +652,24 @@ function playPrevYT() {
   }
 }
 
-function startYTTimer() {
-  clearInterval(ytTimer);
-  ytTimer = setInterval(() => {
-    if (!ytPlayer || ytState !== 1) return;
-    renderYTProgress();
-  }, 500);
-}
-
-function renderYTProgress() {
-  if (!ytPlayer) return;
-  try {
-    const cur = ytPlayer.getCurrentTime() || 0;
-    const dur = ytPlayer.getDuration() || 0;
-
-    if (dur > 0) {
-      const pct = Math.min(100, (cur / dur) * 100);
-      const mprog = $('#mprog');
-      if (mprog) mprog.style.width = pct + '%';
-      const seek = $('#seek');
-      if (seek) seek.value = (cur / dur) * 1000;
-    }
-
-    const tcur = $('#tcur');
-    if (tcur) tcur.textContent = fmt(cur);
-    const tdur = $('#tdur');
-    if (tdur) tdur.textContent = fmt(dur);
-  } catch (e) {}
-}
-
 function renderYTControls() {
+  const isPlaying = !au.paused && S.ytActive;
   document.querySelectorAll('.yta-row').forEach(row => {
     const vid = row.querySelector('[data-vid]')?.dataset.vid;
     const isCur = vid === ytCurrentId;
-    row.classList.toggle('playing', isCur && ytState === 1);
+    row.classList.toggle('playing', isCur && isPlaying);
+    const iconWrap = row.querySelector('.yta-row-overlay');
+    if (iconWrap && isCur) {
+      iconWrap.innerHTML = isPlaying
+        ? '<svg class="ic" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>'
+        : '<svg class="ic" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>';
+    }
   });
 }
 
 function playYTAudio(videoId) {
-  ensureYTAPI();
   ytCurrentId = videoId;
   S.ytActive = true;
-
-  // Pause local audio player
-  const au = $('#au');
-  if (au && !au.paused) {
-    au.pause();
-  }
 
   const entry = ytLinks.find(x => x.videoId === videoId);
   if (entry) {
@@ -804,68 +692,37 @@ function playYTAudio(videoId) {
     }
   }
 
-  if (ytPlayer && ytReady) {
-    try {
-      ytPlayer.loadVideoById(videoId);
-      ytPlayer.playVideo();
-    } catch (e) {
-      console.warn('loadVideoById error', e);
-    }
-  } else {
-    let attempts = 0;
-    const check = setInterval(() => {
-      attempts++;
-      if (ytPlayer && ytReady) {
-        clearInterval(check);
-        try {
-          ytPlayer.loadVideoById(videoId);
-          ytPlayer.playVideo();
-        } catch (e) {}
-      } else if (attempts > 15) {
-        clearInterval(check);
-      }
-    }, 300);
-  }
+  // Putar melalui HTML5 <audio> utama!
+  // Ini yang menjamin audio TETAP BERJALAN di latar belakang saat HP dikunci atau buka aplikasi lain (Background Audio Playback)!
+  au.src = `/youtube/stream-direct/${videoId}`;
+  au.playbackRate = S.speed;
+  au.play().catch(e => {
+    console.warn('Playback error', e);
+  });
 
-  $('#mpp').innerHTML = $('#npp').innerHTML = '<use href="#i-pause"/>';
+  renderYTControls();
   if (S.nav === 'video') {
     render();
   }
 }
 
 function toggleYTAudio() {
-  if (!ytPlayer) return;
-  try {
-    if (ytState === 1) {
-      ytPlayer.pauseVideo();
-    } else {
-      ytPlayer.playVideo();
-    }
-  } catch (e) {}
+  if (!au.src) {
+    if (ytCurrentId) playYTAudio(ytCurrentId);
+    else if (ytLinks.length) playYTAudio(ytLinks[0].videoId);
+    return;
+  }
+  au.paused ? au.play() : au.pause();
 }
 
 function stopYTAudio() {
-  if (!ytPlayer) return;
-  try {
-    ytPlayer.stopVideo();
-  } catch (e) {}
-  clearInterval(ytTimer);
+  au.pause();
+  au.removeAttribute('src');
   ytCurrentId = null;
-  ytState = -1;
   S.ytActive = false;
   $('#mini').hidden = true;
   closeNp();
   render();
-}
-
-function seekYTAudio(pct) {
-  if (!ytPlayer) return;
-  try {
-    const dur = ytPlayer.getDuration() || 0;
-    if (dur > 0) {
-      ytPlayer.seekTo(pct * dur, true);
-    }
-  } catch (e) {}
 }
 
 async function addYTLink(url) {
@@ -883,7 +740,7 @@ async function addYTLink(url) {
 
     const existing = ytLinks.find(x => x.videoId === videoId);
     if (existing) {
-      toast('Lagu sudah ada di daftar YouTube. Memutar audio...');
+      toast('Lagu sudah ada di daftar. Memutar audio...');
       playYTAudio(videoId);
       return;
     }
@@ -915,8 +772,6 @@ async function addYTLink(url) {
    RENDER MENU: YOUTUBE AUDIO ENGINE
    ======================================================== */
 function renderVideoView() {
-  ensureYTAPI();
-
   let h = `
   <div class="yta-wrap">
     <div class="yta-banner">
@@ -949,13 +804,13 @@ function renderVideoView() {
   } else {
     h += `<div class="yta-list">`;
     for (const entry of ytLinks) {
-      const playing = entry.videoId === ytCurrentId;
+      const playing = entry.videoId === ytCurrentId && !au.paused && S.ytActive;
       h += `
       <div class="yta-row${playing ? ' playing' : ''}" data-id="${esc(entry.id)}">
         <div class="yta-row-thumb-wrap" data-act="yt-play" data-vid="${esc(entry.videoId)}">
           <img class="yta-row-thumb" src="${esc(entry.thumbnail)}" alt="" loading="lazy">
           <div class="yta-row-overlay">
-            ${playing && ytState === 1
+            ${playing
               ? `<svg class="ic" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`
               : `<svg class="ic" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>`}
           </div>
@@ -1490,6 +1345,7 @@ function favUI(t) {
 function ppUI() {
   const id = au.paused ? 'play' : 'pause';
   $('#mpp').innerHTML = $('#npp').innerHTML = `<use href="#i-${id}"/>`;
+  renderYTControls();
 }
 
 async function toggleFav(t) {
