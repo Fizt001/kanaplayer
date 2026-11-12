@@ -50,6 +50,66 @@ class YoutubeController extends Controller
     }
 
     /**
+     * POST /youtube/meta
+     * Instant metadata extraction via YouTube oEmbed API without downloading or converting.
+     */
+    public function meta(Request $request)
+    {
+        $request->validate(['url' => ['required', 'string', 'max:500']]);
+        $rawUrl = trim($request->input('url'));
+
+        if (!preg_match('/^https?:\/\/(www\.)?(youtube\.com\/(watch\?|shorts\/)|youtu\.be\/|music\.youtube\.com\/watch\?)/i', $rawUrl)) {
+            return response()->json(['error' => 'URL harus berupa link YouTube yang valid.'], 422);
+        }
+
+        $cleanUrl = $this->normalizeYoutubeUrl($rawUrl);
+
+        // Extract video ID
+        parse_str(parse_url($cleanUrl, PHP_URL_QUERY) ?? '', $params);
+        $videoId = $params['v'] ?? null;
+        if (!$videoId && preg_match('#youtu\.be/([a-zA-Z0-9_-]+)#', $rawUrl, $m)) {
+            $videoId = $m[1];
+        }
+        if (!$videoId && preg_match('#/shorts/([a-zA-Z0-9_-]+)#', $rawUrl, $m)) {
+            $videoId = $m[1];
+        }
+
+        if (!$videoId) {
+            return response()->json(['error' => 'ID video YouTube tidak ditemukan dalam tautan.'], 422);
+        }
+
+        // Fetch oEmbed
+        $oembedUrl = 'https://www.youtube.com/oembed?url=' . urlencode('https://www.youtube.com/watch?v=' . $videoId) . '&format=json';
+        $ctx = stream_context_create([
+            'http' => [
+                'timeout' => 8,
+                'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            ],
+        ]);
+
+        $json = @file_get_contents($oembedUrl, false, $ctx);
+        $title = 'YouTube Audio';
+        $author = 'YouTube';
+
+        if ($json) {
+            $data = json_decode($json, true);
+            if (isset($data['title'])) {
+                $title = $data['title'];
+            }
+            if (isset($data['author_name'])) {
+                $author = $data['author_name'];
+            }
+        }
+
+        return response()->json([
+            'videoId'   => $videoId,
+            'title'     => $title,
+            'author'    => $author,
+            'thumbnail' => "https://i.ytimg.com/vi/{$videoId}/hqdefault.jpg",
+        ]);
+    }
+
+    /**
      * POST /youtube/info
      * Validate YouTube URL, extract metadata, download audio, return token + metadata.
      */

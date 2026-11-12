@@ -33,7 +33,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/playlists/{playlist}/tracks', [PlaylistController::class, 'addTrack']);
     Route::delete('/playlists/{playlist}/tracks/{track}', [PlaylistController::class, 'removeTrack']);
 
-    // YouTube-to-Audio extraction
+    // YouTube-to-Audio extraction & stream engine
+    Route::post('/youtube/meta', [YoutubeController::class, 'meta']);
     Route::post('/youtube/info', [YoutubeController::class, 'info']);
     Route::get('/youtube/stream/{token}', [YoutubeController::class, 'stream']);
 

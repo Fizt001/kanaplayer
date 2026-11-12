@@ -616,66 +616,357 @@ function renderMusicOfflineView() {
 }
 
 /* ========================================================
-   RENDER MENU: PLAYER VIDEO (FITUR TERKUNCI)
+   YOUTUBE AUDIO STREAMING ENGINE (IFrame Player API)
+   ======================================================== */
+const YT_STORAGE_KEY = 'playermp3_yt_links';
+let ytLinks = [];
+try {
+  ytLinks = JSON.parse(localStorage.getItem(YT_STORAGE_KEY) || '[]');
+} catch (e) {
+  ytLinks = [];
+}
+
+let ytPlayer = null;
+let ytReady = false;
+let ytCurrentId = null;
+let ytState = -1; // -1: unstarted, 0: ended, 1: playing, 2: paused, 3: buffering
+let ytTimer = null;
+
+function saveYTLinks() {
+  try {
+    localStorage.setItem(YT_STORAGE_KEY, JSON.stringify(ytLinks));
+  } catch (e) {}
+}
+
+function ensureYTAPI() {
+  if (window.YT && window.YT.Player) {
+    if (!ytPlayer && document.getElementById('yt-engine-iframe')) {
+      initYTEngine();
+    }
+    return;
+  }
+  if (document.getElementById('yt-iframe-script')) return;
+  const tag = document.createElement('script');
+  tag.id = 'yt-iframe-script';
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+}
+
+window.onYouTubeIframeAPIReady = function() {
+  initYTEngine();
+};
+
+function initYTEngine() {
+  if (ytPlayer) return;
+  const target = document.getElementById('yt-engine-iframe');
+  if (!target) return;
+
+  try {
+    ytPlayer = new YT.Player('yt-engine-iframe', {
+      height: '1',
+      width: '1',
+      playerVars: {
+        playsinline: 1,
+        controls: 0,
+        disablekb: 1,
+        fs: 0,
+        rel: 0,
+        origin: window.location.origin,
+      },
+      events: {
+        onReady: () => {
+          ytReady = true;
+          if (ytCurrentId) {
+            try { ytPlayer.loadVideoById(ytCurrentId); } catch (e) {}
+          }
+        },
+        onStateChange: (e) => {
+          ytState = e.data;
+          handleYTStateChange(e.data);
+        },
+        onError: (err) => {
+          console.warn('YT Audio Engine Error', err);
+          toast('⚠️ Video tidak dapat diputar via audio engine (mungkin dibatasi oleh YouTube).');
+          clearInterval(ytTimer);
+        }
+      }
+    });
+  } catch (e) {
+    console.warn('initYTEngine failed', e);
+  }
+}
+
+function handleYTStateChange(state) {
+  if (state === 1) { // playing
+    const au = $('#au');
+    if (au && !au.paused) {
+      au.pause();
+      S.playing = false;
+      renderPlayState();
+    }
+    startYTTimer();
+  } else if (state === 2 || state === 0) { // paused or ended
+    clearInterval(ytTimer);
+    if (state === 0) {
+      playNextYT();
+    }
+  }
+  renderYTControls();
+}
+
+function playNextYT() {
+  if (!ytLinks.length || !ytCurrentId) return;
+  const idx = ytLinks.findIndex(x => x.videoId === ytCurrentId);
+  if (idx !== -1 && idx + 1 < ytLinks.length) {
+    playYTAudio(ytLinks[idx + 1].videoId);
+  }
+}
+
+function startYTTimer() {
+  clearInterval(ytTimer);
+  ytTimer = setInterval(() => {
+    if (!ytPlayer || ytState !== 1) return;
+    renderYTProgress();
+  }, 500);
+}
+
+function renderYTProgress() {
+  if (!ytPlayer) return;
+  try {
+    const cur = ytPlayer.getCurrentTime() || 0;
+    const dur = ytPlayer.getDuration() || 0;
+    const curEl = document.getElementById('yta-cur');
+    const durEl = document.getElementById('yta-dur');
+    const fillEl = document.getElementById('yta-fill');
+    if (curEl) curEl.textContent = fmt(cur);
+    if (durEl) durEl.textContent = fmt(dur);
+    if (fillEl && dur > 0) {
+      fillEl.style.width = Math.min(100, (cur / dur) * 100) + '%';
+    }
+  } catch (e) {}
+}
+
+function renderYTControls() {
+  const btn = document.querySelector('.yta-play-btn');
+  if (btn) {
+    const isPlaying = ytState === 1;
+    btn.innerHTML = isPlaying
+      ? `<svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`
+      : `<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`;
+  }
+  document.querySelectorAll('.yta-row').forEach(row => {
+    const isCur = row.dataset.id === ytCurrentId;
+    row.classList.toggle('playing', isCur && ytState === 1);
+  });
+}
+
+function playYTAudio(videoId) {
+  ensureYTAPI();
+  ytCurrentId = videoId;
+
+  // Pause local audio player
+  const au = $('#au');
+  if (au && !au.paused) {
+    au.pause();
+    S.playing = false;
+    renderPlayState();
+  }
+
+  if (ytPlayer && ytReady) {
+    try {
+      ytPlayer.loadVideoById(videoId);
+      ytPlayer.playVideo();
+    } catch (e) {
+      console.warn('loadVideoById error', e);
+    }
+  } else {
+    let attempts = 0;
+    const check = setInterval(() => {
+      attempts++;
+      if (ytPlayer && ytReady) {
+        clearInterval(check);
+        try {
+          ytPlayer.loadVideoById(videoId);
+          ytPlayer.playVideo();
+        } catch (e) {}
+      } else if (attempts > 15) {
+        clearInterval(check);
+      }
+    }, 300);
+  }
+
+  if (S.nav === 'video') {
+    render();
+  }
+}
+
+function toggleYTAudio() {
+  if (!ytPlayer) return;
+  try {
+    if (ytState === 1) {
+      ytPlayer.pauseVideo();
+    } else {
+      ytPlayer.playVideo();
+    }
+  } catch (e) {}
+}
+
+function stopYTAudio() {
+  if (!ytPlayer) return;
+  try {
+    ytPlayer.stopVideo();
+  } catch (e) {}
+  clearInterval(ytTimer);
+  ytCurrentId = null;
+  ytState = -1;
+  render();
+}
+
+function seekYTAudio(pct) {
+  if (!ytPlayer) return;
+  try {
+    const dur = ytPlayer.getDuration() || 0;
+    if (dur > 0) {
+      ytPlayer.seekTo(pct * dur, true);
+    }
+  } catch (e) {}
+}
+
+async function addYTLink(url) {
+  if (!url || !url.trim()) return;
+  url = url.trim();
+
+  toast('🔍 Mengambil informasi audio YouTube...');
+  try {
+    const res = await api('/youtube/meta', 'POST', { url });
+    if (!res.ok || !res.data || !res.data.videoId) {
+      return toast('❌ ' + (res.data?.error || 'Link YouTube tidak valid atau video tidak ditemukan.'));
+    }
+
+    const { videoId, title, author, thumbnail } = res.data;
+
+    const existing = ytLinks.find(x => x.videoId === videoId);
+    if (existing) {
+      toast('Lagu sudah ada di daftar YouTube. Memutar audio...');
+      playYTAudio(videoId);
+      return;
+    }
+
+    const item = {
+      id: 'yt_' + Date.now(),
+      videoId,
+      title: title || 'YouTube Audio',
+      author: author || 'YouTube',
+      thumbnail: thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      added_at: new Date().toISOString(),
+    };
+
+    ytLinks.unshift(item);
+    saveYTLinks();
+    toast(`✅ "${item.title}" ditambahkan ke YouTube Audio!`);
+
+    playYTAudio(videoId);
+    if (S.nav !== 'video') {
+      S.nav = 'video';
+    }
+    render();
+  } catch (e) {
+    toast('❌ Gagal menambahkan link: ' + (e.message || 'Error'));
+  }
+}
+
+/* ========================================================
+   RENDER MENU: YOUTUBE AUDIO ENGINE
    ======================================================== */
 function renderVideoView() {
-  return `
-  <div class="video-locked-wrap">
-    <div class="video-hero-card">
-      <div class="video-lock-badge">
-        <svg class="ic"><use href="#i-lock"/></svg>
-        <span>Fitur Terkunci</span>
-      </div>
+  ensureYTAPI();
+  const curEntry = ytLinks.find(l => l.videoId === ytCurrentId);
 
-      <div class="video-graphic">
-        <div class="video-graphic-circle">
-          <svg class="ic"><use href="#i-video"/></svg>
-        </div>
+  let h = `
+  <div class="yta-wrap">
+    <div class="yta-banner">
+      <div class="yta-banner-text">
+        <h3>
+          <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22" style="vertical-align:-4px;margin-right:6px"><path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 1.86-.14 3.23-.44 4.17-.27.86-.9 1.49-1.76 1.76-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 18c-3.19 0-5.17-.14-5.83-.44a2.5 2.5 0 01-1.76-1.76c-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L4 12c0-1.86.14-3.23.44-4.17a2.5 2.5 0 011.76-1.76c.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 6c3.19 0 5.17.14 5.83.44a2.5 2.5 0 011.73 1.73z"/></svg>
+          Mesin Audio YouTube
+        </h3>
+        <p>Putar audio dari YouTube langsung tanpa perlu download atau convert.</p>
       </div>
-
-      <h3>Player Video Offline HD</h3>
-      <p class="video-hero-desc">
-        Putar video favorit Anda dari memori HP atau Laptop (MP4, MKV, WebM) langsung tanpa internet dan tanpa kuota data.
-      </p>
-
-      <div class="video-status-chip">
-        <span class="dot"></span>
-        <span>Tahap Pengembangan · Segera Hadir</span>
-      </div>
-    </div>
-
-    <div class="video-features-group">
-      <div class="video-feat-item">
-        <div class="video-feat-icon">🎬</div>
-        <div class="video-feat-text">
-          <b>Pemutar Video Offline Berkualitas Tinggi</b>
-          <span>Mendukung resolusi hingga 4K UHD dengan decoding hardware yang hemat daya baterai.</span>
-        </div>
-      </div>
-      <div class="video-feat-item">
-        <div class="video-feat-icon">⚡</div>
-        <div class="video-feat-text">
-          <b>Kontrol Gestur Sentuh Cerdas</b>
-          <span>Usap kiri/kanan untuk kecerahan, volume, dan geser cepat posisi video layaknya aplikasi Android bawaan.</span>
-        </div>
-      </div>
-      <div class="video-feat-item">
-        <div class="video-feat-icon">📺</div>
-        <div class="video-feat-text">
-          <b>Picture-in-Picture (PiP) &amp; Latar Belakang</b>
-          <span>Tonton video dalam jendela mengambang mini sambil membuka aplikasi lain.</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="video-cta-box">
-      <button class="tb-btn primary" data-act="nav" data-nav="account" style="height:44px;padding:0 24px;font-size:14px;">
-        <svg class="ic"><use href="#i-user"/></svg>
-        <span>Lihat Status Akun Saya</span>
+      <button class="btn-yta-add" data-act="yt-add-link">
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        <span>Tambah Link</span>
       </button>
-      <span class="video-cta-note">Fitur ini akan otomatis aktif di akun Anda saat pembaruan dirilis.</span>
-    </div>
-  </div>`;
+    </div>`;
+
+  if (curEntry) {
+    h += `
+    <div class="yta-now-playing">
+      <img class="yta-np-thumb" src="${esc(curEntry.thumbnail)}" alt="">
+      <div class="yta-np-body">
+        <b class="yta-np-title">${esc(curEntry.title)}</b>
+        <span class="yta-np-author">${esc(curEntry.author)}</span>
+        <div class="yta-np-controls">
+          <button class="yta-np-btn yta-play-btn" data-act="yt-toggle-play" title="Putar / Jeda">
+            ${ytState === 1
+              ? `<svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`
+              : `<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`}
+          </button>
+          <div class="yta-np-seek-wrap">
+            <span class="yta-np-cur" id="yta-cur">0:00</span>
+            <div class="yta-np-seek" id="yta-seek-bar" data-act="yt-seek">
+              <div class="yta-np-seek-fill" id="yta-fill"></div>
+            </div>
+            <span class="yta-np-dur" id="yta-dur">0:00</span>
+          </div>
+          <button class="yta-np-btn yta-stop-btn" data-act="yt-stop" title="Berhenti">
+            <svg class="ic" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  if (!ytLinks.length) {
+    h += `
+    <div class="empty" style="padding:48px 16px;text-align:center;">
+      <div style="font-size:40px;margin-bottom:12px;">🎵</div>
+      <b style="display:block;font-size:16px;color:var(--txt);margin-bottom:6px;">Belum Ada Lagu YouTube</b>
+      <p style="color:var(--mut);font-size:13px;max-width:380px;margin:0 auto 16px;line-height:1.5;">
+        Klik <b style="color:var(--txt)">Tambah Link</b> di atas, tempel tautan video YouTube (termasuk Mix, Radio, Musik), dan audio akan langsung diputar!
+      </p>
+      <button class="btn-yta-add" data-act="yt-add-link" style="margin:0 auto;">
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        <span>Tambah Link YouTube Sekarang</span>
+      </button>
+    </div>`;
+  } else {
+    h += `<div class="yta-list">`;
+    for (const entry of ytLinks) {
+      const playing = entry.videoId === ytCurrentId;
+      h += `
+      <div class="yta-row${playing ? ' playing' : ''}" data-id="${esc(entry.id)}">
+        <div class="yta-row-thumb-wrap" data-act="yt-play" data-vid="${esc(entry.videoId)}">
+          <img class="yta-row-thumb" src="${esc(entry.thumbnail)}" alt="" loading="lazy">
+          <div class="yta-row-overlay">
+            ${playing && ytState === 1
+              ? `<svg class="ic" viewBox="0 0 24 24" fill="white"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`
+              : `<svg class="ic" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>`}
+          </div>
+        </div>
+        <div class="yta-row-info" data-act="yt-play" data-vid="${esc(entry.videoId)}" style="cursor:pointer;">
+          <b class="yta-row-title">${esc(entry.title)}</b>
+          <span class="yta-row-author">${esc(entry.author)}</span>
+        </div>
+        <button class="yta-row-del" data-act="yt-remove" data-id="${esc(entry.id)}" title="Hapus dari daftar">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </button>
+      </div>`;
+    }
+    h += `</div>`;
+  }
+
+  h += `</div>`;
+  return h;
 }
 
 /* ========================================================
@@ -1625,15 +1916,49 @@ const A = {
   'pick-local-folder': () => $('#local-folder-picker')?.click(),
   'youtube-link': () => {
     promptDialog({
-      title: 'Tambah Lagu dari YouTube',
-      desc: 'Tempel link YouTube (video biasa, Shorts, atau YouTube Music)',
+      title: 'Putar Audio YouTube',
+      desc: 'Tempel tautan YouTube apa saja. Audio langsung diputar di mesin pemutar tanpa perlu download.',
       label: 'Link YouTube',
       placeholder: 'https://youtu.be/... atau https://youtube.com/watch?v=...',
       initialValue: '',
-      submitText: 'Ambil Audio',
+      submitText: 'Putar Sekarang',
     }).then(url => {
-      if (url && url.trim()) extractYoutubeAudio(url.trim());
+      if (url && url.trim()) addYTLink(url.trim());
     });
+  },
+  'yt-add-link': () => {
+    promptDialog({
+      title: 'Tambah Audio YouTube',
+      desc: 'Tempel link video YouTube apa saja (termasuk Mix, Radio, Shorts, dll)',
+      label: 'Tautan YouTube',
+      placeholder: 'https://youtube.com/watch?v=... atau https://youtu.be/...',
+      initialValue: '',
+      submitText: 'Putar Audio',
+    }).then(url => {
+      if (url && url.trim()) addYTLink(url.trim());
+    });
+  },
+  'yt-play': el => {
+    const vid = el.dataset.vid || el.closest('[data-vid]')?.dataset.vid;
+    if (vid) playYTAudio(vid);
+  },
+  'yt-toggle-play': () => toggleYTAudio(),
+  'yt-stop': () => stopYTAudio(),
+  'yt-remove': el => {
+    const id = el.dataset.id || el.closest('[data-id]')?.dataset.id;
+    const item = ytLinks.find(x => x.id === id);
+    if (!item) return;
+    if (item.videoId === ytCurrentId) stopYTAudio();
+    ytLinks = ytLinks.filter(x => x.id !== id);
+    saveYTLinks();
+    toast('Lagu dihapus dari daftar YouTube');
+    render();
+  },
+  'yt-seek': (el, ev) => {
+    const rect = el.getBoundingClientRect();
+    const clickX = ev.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, clickX / rect.width));
+    seekYTAudio(pct);
   },
   'clear-local-music': async () => {
     const ok = await confirmDialog({
@@ -1717,7 +2042,7 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]');
   if (!el || !A[el.dataset.act]) return;
   e.stopPropagation();
-  A[el.dataset.act](el);
+  A[el.dataset.act](el, e);
 });
 $('#q').addEventListener('input', e => { S.q = e.target.value.trim().toLowerCase(); render(); });
 $('#paywall').addEventListener('click', e => { if (e.target.id === 'paywall') A.pwclose(); });

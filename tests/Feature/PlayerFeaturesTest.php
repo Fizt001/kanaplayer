@@ -102,4 +102,18 @@ class PlayerFeaturesTest extends TestCase
         $this->actingAs($u)->postJson('/playlists', ['name' => ''])->assertStatus(422);
         $this->getJson('/playlists')->assertOk(); // masih login
     }
+
+    public function test_youtube_meta_validates_and_extracts_id(): void
+    {
+        $u = User::factory()->create();
+
+        $this->actingAs($u)->postJson('/youtube/meta', ['url' => 'not-a-url'])
+            ->assertStatus(422);
+
+        $res = $this->actingAs($u)->postJson('/youtube/meta', [
+            'url' => 'https://www.youtube.com/watch?v=xwh4tFI2TIk&list=RDxwh4tFI2TIk&start_radio=1',
+        ]);
+        $res->assertOk()
+            ->assertJsonPath('videoId', 'xwh4tFI2TIk');
+    }
 }

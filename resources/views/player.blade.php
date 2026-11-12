@@ -63,9 +63,8 @@
         <span>Musik Offline</span>
       </button>
       <button class="sb-link" data-act="nav" data-nav="video">
-        <svg class="ic"><use href="#i-video"/></svg>
-        <span>Player Video</span>
-        <span class="sb-lock-pill"><svg class="ic-mini"><use href="#i-lock"/></svg><span>Kunci</span></span>
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 1.86-.14 3.23-.44 4.17-.27.86-.9 1.49-1.76 1.76-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 18c-3.19 0-5.17-.14-5.83-.44a2.5 2.5 0 01-1.76-1.76c-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L4 12c0-1.86.14-3.23.44-4.17a2.5 2.5 0 011.76-1.76c.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 6c3.19 0 5.17.14 5.83.44a2.5 2.5 0 011.73 1.73z"/></svg>
+        <span>YouTube Audio</span>
       </button>
 
       <div class="sb-section-title" style="margin-top:16px;">Koleksi &amp; Akun</div>
@@ -153,10 +152,9 @@
     </button>
     <button class="bnav-btn" data-act="nav" data-nav="video">
       <div class="bnav-icon">
-        <svg class="ic"><use href="#i-video"/></svg>
-        <span class="bnav-lock-badge"><svg class="ic-mini"><use href="#i-lock"/></svg></span>
+        <svg class="ic" viewBox="0 0 24 24" fill="currentColor"><path d="M10 15l5.19-3L10 9v6m11.56-7.83c.13.47.22 1.1.28 1.9.07.8.1 1.49.1 2.09L22 12c0 1.86-.14 3.23-.44 4.17-.27.86-.9 1.49-1.76 1.76-.47.13-1.33.22-2.65.28-1.3.07-2.49.1-3.59.1L12 18c-3.19 0-5.17-.14-5.83-.44a2.5 2.5 0 01-1.76-1.76c-.13-.47-.22-1.1-.28-1.9-.07-.8-.1-1.49-.1-2.09L4 12c0-1.86.14-3.23.44-4.17a2.5 2.5 0 011.76-1.76c.47-.13 1.33-.22 2.65-.28 1.3-.07 2.49-.1 3.59-.1L12 6c3.19 0 5.17.14 5.83.44a2.5 2.5 0 011.73 1.73z"/></svg>
       </div>
-      <span class="bnav-label">Video</span>
+      <span class="bnav-label">YT Audio</span>
     </button>
     <button class="bnav-btn" data-act="nav" data-nav="playlists">
       <div class="bnav-icon"><svg class="ic"><use href="#i-playlist"/></svg></div>
@@ -330,6 +328,9 @@
 
   <div id="toast"></div>
   <audio id="au" preload="none"></audio>
+  <div id="yt-engine-wrap" style="position:fixed;bottom:-9999px;left:-9999px;width:1px;height:1px;opacity:0.01;pointer-events:none;overflow:hidden;">
+    <div id="yt-engine-iframe"></div>
+  </div>
   <form id="logout" method="post" action="/logout">@csrf</form>
 
   {{-- YouTube Download Progress Overlay --}}
