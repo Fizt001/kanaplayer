@@ -734,14 +734,14 @@ function toggleYTAudio() {
   au.paused ? au.play() : au.pause();
 }
 
-function stopYTAudio() {
+function stopYTAudio(skipRender = false) {
   au.pause();
   au.removeAttribute('src');
   ytCurrentId = null;
   S.ytActive = false;
   $('#mini').hidden = true;
   closeNp();
-  render();
+  if (!skipRender) render();
 }
 
 async function addYTLink(url) {
@@ -1281,7 +1281,7 @@ function enqueue(id, now) {
   const t = findTrack(id);
   if (!t) return;
   if (S.ytActive) {
-    stopYTAudio();
+    stopYTAudio(true); // skip render, langsung lanjut ke offline
   }
   if (S.qi < 0 || !S.queue.length) { S.queue = [t.id]; S.orig = [t.id]; S.qi = -1; playAt(0); return; }
   const at = now ? S.qi + 1 : S.queue.length;
@@ -1952,11 +1952,13 @@ const A = {
       openNp();
       return;
     }
+    // Siapkan ctx dari localTracks SEBELUM stop YT (agar tidak ter-reset oleh render)
+    const ctx = (S.ctx && S.ctx.length && S.ctx.some(x => findTrack(x)))
+      ? S.ctx
+      : S.localTracks.map(x => x.id);
     if (S.ytActive) {
-      stopYTAudio();
+      stopYTAudio(true); // skip render, langsung lanjut ke offline
     }
-    // Pastikan S.ctx valid — jika kosong atau tidak include track ini, pakai semua localTracks
-    const ctx = (S.ctx && S.ctx.length) ? S.ctx : S.localTracks.map(x => x.id);
     playContext(ctx, id);
   },
   menu: el => {
@@ -1965,7 +1967,7 @@ const A = {
   },
   playall: () => {
     if (!S.ctx || !S.ctx.length) return toast('Tidak ada lagu untuk diputar');
-    if (S.ytActive) stopYTAudio();
+    if (S.ytActive) stopYTAudio(true);
     S.shuffle = false;
     playContext(S.ctx, S.ctx[0], false);
     toast(`Memutar semua (${S.ctx.length} lagu)`);
@@ -1974,7 +1976,7 @@ const A = {
   },
   shuffleall: () => {
     if (!S.ctx || !S.ctx.length) return toast('Tidak ada lagu untuk diputar');
-    if (S.ytActive) stopYTAudio();
+    if (S.ytActive) stopYTAudio(true);
     S.shuffle = true;
     const startId = S.ctx[Math.floor(Math.random() * S.ctx.length)];
     playContext(S.ctx, startId, true);
