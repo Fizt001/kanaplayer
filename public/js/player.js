@@ -30,7 +30,14 @@ const fmt = s => {
 const cmp = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'id', {numeric: true, sensitivity: 'base'});
 const icon = n => `<svg class="ic"><use href="#i-${n}"/></svg>`;
 const shuffleArr = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const cur = () => S.byId.get(S.queue[S.qi]) || S.localTracks.find(x => x.id === S.queue[S.qi]);
+function findTrack(id) {
+  if (id === undefined || id === null || id === '') return null;
+  if (S.byId && S.byId.has(id)) return S.byId.get(id);
+  if (typeof id === 'string' && /^\d+$/.test(id) && S.byId && S.byId.has(+id)) return S.byId.get(+id);
+  if (typeof id === 'number' && S.byId && S.byId.has(String(id))) return S.byId.get(String(id));
+  return (S.localTracks || []).find(x => String(x.id) === String(id)) || null;
+}
+const cur = () => findTrack(S.queue[S.qi]);
 
 let toastT;
 function toast(msg) {
@@ -489,7 +496,7 @@ function detailTracks(d) {
     case 'most':    return T.filter(t => (t.play_count || 0) > 0).sort((a, b) => (b.play_count || 0) - (a.play_count || 0)).slice(0, 50);
     case 'playlist': {
       const p = S.playlists.find(x => String(x.id) === String(d.key));
-      return p ? p.track_ids.map(id => S.byId.get(id)).filter(Boolean) : [];
+      return p ? p.track_ids.map(id => findTrack(id)).filter(Boolean) : [];
     }
   }
   return [];
@@ -890,7 +897,7 @@ function renderPlaylistsView() {
     </div>
     <div class="pl-group-card">`;
     h += customPlaylists.map((p, idx) => {
-      const first = S.byId.get(p.track_ids[0]);
+      const first = findTrack(p.track_ids[0]);
       const cvHtml = first && first.cover_url
         ? coverHtml(first.cover_url)
         : `<div class="cv smart-custom">${icon('playlist')}</div>`;
@@ -1125,8 +1132,8 @@ function render() {
 }
 
 function markNow() {
-  const id = cur() && cur().id;
-  $$('#content .row[data-act=play]').forEach(r => r.classList.toggle('on', String(r.dataset.id) === String(id)));
+  const id = !S.ytActive && cur() && cur().id;
+  $$('#content .row[data-act=play]').forEach(r => r.classList.toggle('on', !!id && String(r.dataset.id) === String(id)));
 }
 
 /* ========================================================
@@ -1134,15 +1141,16 @@ function markNow() {
    ======================================================== */
 async function playAt(i, startPos = 0) {
   S.ytActive = false;
+  ytCurrentId = null;
   if (ytPlayer && ytState === 1) {
     try { ytPlayer.pauseVideo(); } catch (e) {}
   }
   const id = S.queue[i];
-  const t = S.byId.get(id) || S.localTracks.find(x => x.id === id);
+  const t = findTrack(id);
   if (!t) return false;
 
   // Lagu dari perangkat lokal: Putar via Blob URL (cek kuota harian jika member Free)
-  if (t.is_local || String(id).startsWith('dev_')) {
+  if (t.is_local || String(id).startsWith('dev_') || String(id).startsWith('yt_') || t.blob) {
     const m = S.me || {};
     const isFree = !m.premium && !m.is_admin;
     if (isFree && m.remaining !== null && m.remaining <= 0) {
@@ -1269,13 +1277,17 @@ function syncModes() {
 
 /* Antrean */
 function enqueue(id, now) {
-  const t = S.byId.get(id) || S.localTracks.find(x => x.id === id);
+  const t = findTrack(id);
   if (!t) return;
-  if (S.qi < 0 || !S.queue.length) { S.queue = [id]; S.orig = [id]; S.qi = -1; playAt(0); return; }
+  if (S.ytActive) {
+    stopYTAudio();
+  }
+  if (S.qi < 0 || !S.queue.length) { S.queue = [t.id]; S.orig = [t.id]; S.qi = -1; playAt(0); return; }
   const at = now ? S.qi + 1 : S.queue.length;
-  S.queue.splice(at, 0, id);
+  S.queue.splice(at, 0, t.id);
   const oi = S.orig.indexOf(S.queue[S.qi]);
-  S.orig.splice(now ? oi + 1 : S.orig.length, 0, id);
+  if (oi >= 0) S.orig.splice(now ? oi + 1 : S.orig.length, 0, t.id);
+  else S.orig.push(t.id);
   saveState();
   toast(now ? 'Akan diputar berikutnya' : 'Ditambahkan ke antrean');
 }
@@ -1315,7 +1327,7 @@ function renderQueue() {
   if (!S.queue.length) { el.innerHTML = '<div class="empty">Antrean kosong.</div>'; return; }
   let h = '';
   S.queue.forEach((id, i) => {
-    const t = S.byId.get(id) || S.localTracks.find(x => x.id === id); if (!t) return;
+    const t = findTrack(id); if (!t) return;
     if (i === S.qi) h += '<div class="qlabel">Sedang diputar</div>';
     if (i === S.qi + 1) h += '<div class="qlabel">Berikutnya</div>';
     h += `<div class="qrow ${i === S.qi ? 'on' : ''} ${i < S.qi ? 'done' : ''}" data-act="qplay" data-i="${i}">
@@ -1616,7 +1628,7 @@ function restoreState() {
   if (!st || st.uid !== window.PM.uid) return;
   S.shuffle = !!st.shuffle; S.repeat = st.repeat || 'off'; S.speed = st.speed || 1;
   const curId = (st.queue || [])[st.qi];
-  const findT = id => S.byId.get(id) || S.localTracks.find(x => x.id === id);
+  const findT = id => findTrack(id);
   S.queue = (st.queue || []).filter(id => !!findT(id));
   S.orig = (st.orig || []).filter(id => !!findT(id));
   S.qi = S.queue.indexOf(curId);
@@ -1898,6 +1910,9 @@ const A = {
     if (item.videoId === ytCurrentId) stopYTAudio();
     ytLinks = ytLinks.filter(x => x.id !== id);
     saveYTLinks();
+    if (!ytLinks.length) {
+      stopYTAudio();
+    }
     toast('Lagu dihapus dari daftar YouTube');
     render();
   },
@@ -1921,7 +1936,7 @@ const A = {
     toast('Semua lagu perangkat telah dibersihkan');
   },
   'local-menu': el => {
-    const t = S.localTracks.find(x => x.id === el.dataset.id);
+    const t = findTrack(el.dataset.id);
     if (t) trackMenu(t);
   },
   newpl: () => createPlaylist(null),
@@ -1929,34 +1944,37 @@ const A = {
     .map(([k, l]) => ({label: l, on: S.sort === k, fn: () => { S.sort = k; render(); }}))),
   play: el => {
     const rawId = el.dataset.id;
-    const id = rawId.startsWith('dev_') ? rawId : +rawId;
-    if (cur() && cur().id === id && !au.paused) {
+    const t = findTrack(rawId);
+    if (!t) return;
+    const id = t.id;
+    if (!S.ytActive && cur() && String(cur().id) === String(id) && !au.paused) {
       openNp();
       return;
+    }
+    if (S.ytActive) {
+      stopYTAudio();
     }
     playContext(S.ctx, id);
   },
   menu: el => {
-    const rawId = el.dataset.id;
-    const id = rawId.startsWith('dev_') ? rawId : +rawId;
-    const t = S.byId.get(id) || S.localTracks.find(x => x.id === id);
+    const t = findTrack(el.dataset.id);
     if (t) trackMenu(t);
   },
   playall: () => {
     if (!S.ctx || !S.ctx.length) return toast('Tidak ada lagu untuk diputar');
+    if (S.ytActive) stopYTAudio();
     S.shuffle = false;
     playContext(S.ctx, S.ctx[0], false);
-    if (au.src) { au.currentTime = 0; au.play().catch(() => {}); }
     toast(`Memutar semua (${S.ctx.length} lagu)`);
     syncModes();
     render();
   },
   shuffleall: () => {
     if (!S.ctx || !S.ctx.length) return toast('Tidak ada lagu untuk diputar');
+    if (S.ytActive) stopYTAudio();
     S.shuffle = true;
     const startId = S.ctx[Math.floor(Math.random() * S.ctx.length)];
     playContext(S.ctx, startId, true);
-    if (au.src) { au.currentTime = 0; au.play().catch(() => {}); }
     toast(S.ctx.length > 1 ? `Memutar acak (${S.ctx.length} lagu)` : 'Mode acak diaktifkan');
     syncModes();
     render();
