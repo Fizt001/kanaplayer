@@ -2236,3 +2236,42 @@ input, textarea, select {
   height: 16px;
   fill: currentColor;
 }
+
+/* ---------- Pull-to-Refresh Indicator ---------- */
+#ptr-indicator {
+  position: fixed;
+  top: -48px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 40px;
+  background: var(--accent, #e63232);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity 0.15s ease;
+  will-change: transform, opacity;
+}
+#ptr-indicator svg {
+  width: 20px;
+  height: 20px;
+  stroke: #fff;
+}
+#ptr-indicator.ptr-show {
+  opacity: 1;
+}
+#ptr-indicator.ptr-ready {
+  background: #2ecc71;
+}
+#ptr-indicator.ptr-spin svg {
+  animation: ptr-spin-anim 0.6s linear infinite;
+}
+@keyframes ptr-spin-anim {
+  to { transform: rotate(360deg); }
+}

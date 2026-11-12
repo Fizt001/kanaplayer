@@ -2125,6 +2125,69 @@ function bindDrop() {
 }
 ['dragover', 'drop'].forEach(ev => window.addEventListener(ev, e => { if (!e.target.closest || !e.target.closest('#drop')) e.preventDefault(); }));
 
+/* ---------- Pull-to-Refresh Mobile ---------- */
+(function setupPullToRefresh() {
+  const THRESHOLD = 72;   // px tarik sebelum trigger refresh
+  const MAX_PULL  = 110;  // px maks tarik (klamp)
+  let startY = 0, curY = 0, pulling = false, triggered = false;
+
+  // Buat elemen indikator
+  const ind = document.createElement('div');
+  ind.id = 'ptr-indicator';
+  ind.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>';
+  document.body.appendChild(ind);
+
+  const content = document.getElementById('content');
+  if (!content) return;
+
+  content.addEventListener('touchstart', e => {
+    if (content.scrollTop > 0) return;
+    startY = e.touches[0].clientY;
+    curY   = startY;
+    pulling = true;
+    triggered = false;
+  }, {passive: true});
+
+  content.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    curY = e.touches[0].clientY;
+    const dy = Math.min(Math.max(curY - startY, 0), MAX_PULL);
+    if (dy <= 0) { ind.classList.remove('ptr-show', 'ptr-ready'); ind.style.transform = ''; return; }
+
+    // Rubber-band damping: semakin jauh semakin lambat
+    const pct  = dy / MAX_PULL;
+    const show = dy * 0.45;   // seberapa jauh indikator turun
+    ind.style.transform = `translateX(-50%) translateY(${show}px) rotate(${pct * 360}deg)`;
+    ind.classList.add('ptr-show');
+    if (dy >= THRESHOLD) {
+      ind.classList.add('ptr-ready');
+      if (!triggered) { triggered = true; }
+    } else {
+      ind.classList.remove('ptr-ready');
+      triggered = false;
+    }
+  }, {passive: true});
+
+  content.addEventListener('touchend', () => {
+    if (!pulling) return;
+    pulling = false;
+    const dy = Math.min(Math.max(curY - startY, 0), MAX_PULL);
+    if (dy >= THRESHOLD) {
+      ind.classList.add('ptr-spin');
+      setTimeout(() => location.reload(), 400);
+    } else {
+      ind.classList.remove('ptr-show', 'ptr-ready');
+      ind.style.transform = '';
+    }
+  }, {passive: true});
+
+  content.addEventListener('touchcancel', () => {
+    pulling = false;
+    ind.classList.remove('ptr-show', 'ptr-ready', 'ptr-spin');
+    ind.style.transform = '';
+  }, {passive: true});
+})();
+
 /* ---------- Mulai Aplikasi ---------- */
 syncModes();
 loadAll();
